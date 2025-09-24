@@ -12,7 +12,7 @@ export default function BlockCipherNode({ data }) {
       <Handle type="target" position={Position.Left} id="plaintext" />
       <Handle type="target" position={Position.Right} id="key" />
       <div style={{ marginTop: 8, fontSize: 12, color: hasErr ? '#b00' : '#666' }}>
-        {hasErr ? data.error : (data?.preview ?? 'Plaintext + Key bağla')}
+        {hasErr ? data.error : (data?.preview ?? 'Input plaintext and key')}
       </div>
       <Handle type="source" position={Position.Bottom} id="out" />
     </div>

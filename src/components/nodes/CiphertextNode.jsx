@@ -9,7 +9,7 @@ export default function CiphertextNode({ data }) {
       <Handle type="target" position={Position.Top} id="in" />
       <Handle type="target" position={Position.Top} style={{left: '50%'}} id="in2" />
       <div style={{ marginTop: 8, fontFamily: 'monospace' }}>
-        {data?.result ?? '— (BlockCipher bağla)'}
+        {data?.result ?? '— (connect Block Cipher output) —'}
       </div>
     </div>
   );

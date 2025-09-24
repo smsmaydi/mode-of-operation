@@ -11,7 +11,7 @@ export default function XorBinaryNode({ data }) {
       <Handle type="target" position={Position.Left} id="a" />
       <Handle type="target" position={Position.Right} id="b" />
       <div style={{ fontSize: 12, color: hasErr ? '#b00' : '#666', marginTop: 6 }}>
-        {hasErr ? data.error : (data?.preview ?? '2 giriş (a ve b) bağlayın')}
+        {hasErr ? data.error : (data?.preview ?? '2 input bits')}
       </div>
       <Handle type="source" position={Position.Bottom} id="out" />
     </div>

@@ -13,7 +13,7 @@ export default function PlaintextBinaryNode({ data }) {
         style={{ marginTop: 6, width: '100%', fontFamily: 'monospace' }}
         value={data.bits || ''}
         onChange={onChange}
-        placeholder="ör. 10101010"
+        placeholder="for example 10101010"
       />
       <Handle type="source" position={Position.Bottom} id="out" />
     </div>

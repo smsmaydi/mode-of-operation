@@ -13,7 +13,7 @@ export default function KeyNode({ data }) {
         style={{ marginTop: 6, width: '100%', fontFamily: 'monospace' }}
         value={data.bits || ''}
         onChange={onChange}
-        placeholder="ör. 11001010"
+        placeholder="for example 11001010"
       />
       <Handle type="source" position={Position.Bottom} id="out" />
     </div>
