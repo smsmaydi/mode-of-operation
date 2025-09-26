@@ -7,6 +7,7 @@ export function xorBits(a = '', b = '') {
     if ((a[i] !== '0' && a[i] !== '1') || (b[i] !== '0' && b[i] !== '1')) {
       return { error: 'Not valid' };
     }
+    // xor operation
     out += (a[i] ^ b[i]).toString();
   }
   return { value: out };
