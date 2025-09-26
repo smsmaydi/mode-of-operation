@@ -1,4 +1,4 @@
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
 
 export default function XorBinaryNode({ data }) {
   const hasErr = !!data?.error;

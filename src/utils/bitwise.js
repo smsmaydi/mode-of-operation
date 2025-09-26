@@ -1,14 +1,27 @@
 export function xorBits(a = '', b = '') {
-  if (a.length !== b.length) {
-    return { error: `Uzunluklar eşit olmalı (${a.length} ≠ ${b.length})` };
+  if (!/^[01]*$/.test(a) || !/^[01]*$/.test(b)) {
+    return { error: 'Geçersiz bit dizisi' };
   }
-  let out = '';
-  for (let i = 0; i < a.length; i++) {
-    if ((a[i] !== '0' && a[i] !== '1') || (b[i] !== '0' && b[i] !== '1')) {
-      return { error: 'Not valid' };
+  if (a.length === 0 || b.length === 0) {
+    return { error: 'Boş giriş' };
+  }
+
+  // 🔹 Key'i tekrar ederek uzunluk eşitle
+  let A = a;
+  let B = b;
+  if (a.length !== b.length) {
+    if (b.length < a.length) {
+      // key'i tekrar et
+      B = b.repeat(Math.ceil(a.length / b.length)).slice(0, a.length);
+    } else {
+      // plaintext kısa → plaintext'i pad'le
+      A = a.padEnd(b.length, '0');
     }
-    // xor operation
-    out += (a[i] ^ b[i]).toString();
+  }
+
+  let out = '';
+  for (let i = 0; i < A.length; i++) {
+    out += ((A[i] ^ B[i]) & 1).toString();
   }
   return { value: out };
 }

@@ -1,4 +1,5 @@
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useReactFlow } from 'reactflow';
+
 
 export default function PlaintextBinaryNode({ data }) {
   const onChange = (e) => {
