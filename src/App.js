@@ -1,26 +1,25 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from "react";
 import ReactFlow, {
   addEdge,
   useEdgesState,
   useNodesState,
   Controls,
   Background,
-} from 'reactflow';
+} from "reactflow";
 
-import 'reactflow/dist/style.css';
+import "reactflow/dist/style.css";
 
-import ModeMenu from './components/layout/ModeMenu';
-import NodePalette from './components/palette/NodePalette';
+import ModeMenu from "./components/layout/ModeMenu";
+import NodePalette from "./components/palette/NodePalette";
 
-import PlaintextNode from './components/nodes/PlaintextNode';
-import KeyNode from './components/nodes/KeyNode';
-import BlockCipherNode from './components/nodes/BlockCipherNode';
-import CiphertextNode from './components/nodes/CiphertextNode';
+import PlaintextNode from "./components/nodes/PlaintextNode";
+import KeyNode from "./components/nodes/KeyNode";
+import BlockCipherNode from "./components/nodes/BlockCipherNode";
+import CiphertextNode from "./components/nodes/CiphertextNode";
 
-import { computeGraphValues } from './utils/computeGraph';
-import { xorImageFileWithKey } from './utils/xorImageFile';
-import { buildPreset } from './utils/presets';
-import { makeIsValidConnection } from './utils/validators';
+import { computeGraphValues } from "./utils/computeGraph";
+import { buildPreset } from "./utils/presets";
+import { makeIsValidConnection } from "./utils/validators";
 
 const nodeTypes = {
   plaintext: PlaintextNode,
@@ -30,13 +29,13 @@ const nodeTypes = {
 };
 
 export default function App() {
-  const [mode, setMode] = useState('ecb');
+  const [mode, setMode] = useState("ecb");
 
-  const initial = useMemo(() => buildPreset(mode), []);
+  const initial = useMemo(() => buildPreset(mode), [mode]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
 
-  // 🔹 Node silme
+  // Node silme
   const onNodesDelete = useCallback(
     (deleted) => {
       setNodes((nds) =>
@@ -51,7 +50,7 @@ export default function App() {
     [setNodes, setEdges]
   );
 
-  // 🔹 Edge silme
+  // Edge silme
   const onEdgesDelete = useCallback(
     (deleted) => {
       setEdges((eds) => eds.filter((e) => !deleted.find((d) => d.id === e.id)));
@@ -59,14 +58,15 @@ export default function App() {
     [setEdges]
   );
 
-  // 🔹 Mode değişince preset yükle
+  // Mode değişince preset yükle
   const applyMode = useCallback(
     (m) => {
       setMode(m);
       const preset = buildPreset(m);
 
+      // inject onChange callbacks & defaults into plaintext/key nodes
       const withHandlers = preset.nodes.map((n) => {
-        if (n.type === 'plaintext' || n.type === 'key') {
+        if (n.type === "plaintext" || n.type === "key") {
           return {
             ...n,
             data: {
@@ -77,40 +77,7 @@ export default function App() {
                   const next = nds.map((nn) =>
                     nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
                   );
-                  return computeGraphValues(next, edges);
-                });
-              },
-
-              // ✅ Run XOR for image inputs
-              onRunXor: (keyBits) => {
-                console.log("onRunXor called with keyBits:", keyBits);
-
-                setNodes((nds) => {
-                  const plainNode = nds.find((nn) => nn.type === 'plaintext');
-                  console.log("PlainNode value:", plainNode?.data?.value);
-
-                  if (plainNode?.data?.value instanceof File) {
-                    xorImageFileWithKey(plainNode.data.value, keyBits).then(
-                      (dataUrl) => {
-                        console.log(
-                          "Image XOR done, dataUrl length:",
-                          dataUrl.length
-                        );
-                        setNodes((inner) =>
-                          inner.map((nn) =>
-                            nn.type === 'ciphertext'
-                              ? {
-                                  ...nn,
-                                  data: { ...nn.data, result: dataUrl },
-                                }
-                              : nn
-                          )
-                        );
-                      }
-                    );
-                  }
-
-                  return nds;
+                  return computeGraphValues(next, preset.edges);
                 });
               },
             },
@@ -122,7 +89,7 @@ export default function App() {
       setNodes(computeGraphValues(withHandlers, preset.edges));
       setEdges(preset.edges);
     },
-    [setNodes, setEdges, edges]
+    [setNodes, setEdges]
   );
 
   React.useEffect(() => {
@@ -152,9 +119,9 @@ export default function App() {
 
   const onDrop = useCallback(
     (event) => {
-      if (mode !== 'free') return;
+      if (mode !== "free") return;
       event.preventDefault();
-      const payload = event.dataTransfer.getData('application/reactflow');
+      const payload = event.dataTransfer.getData("application/reactflow");
       if (!payload) return;
       const { type } = JSON.parse(payload);
 
@@ -182,8 +149,8 @@ export default function App() {
         type,
         position,
         data:
-          type === 'plaintext' || type === 'key'
-            ? { ...dataBase, bits: '' }
+          type === "plaintext" || type === "key"
+            ? { ...dataBase, value: "", bits: "" }
             : { ...dataBase },
       };
 
@@ -194,9 +161,9 @@ export default function App() {
 
   const onDragOver = useCallback(
     (event) => {
-      if (mode !== 'free') return;
+      if (mode !== "free") return;
       event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
+      event.dataTransfer.dropEffect = "move";
     },
     [mode]
   );
@@ -220,9 +187,9 @@ export default function App() {
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: '220px 1fr 220px',
-        height: '100vh',
+        display: "grid",
+        gridTemplateColumns: "220px 1fr 220px",
+        height: "100vh",
       }}
     >
       <ModeMenu current={mode} onSelect={applyMode} />
@@ -230,7 +197,7 @@ export default function App() {
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
-        style={{ position: 'relative' }}
+        style={{ position: "relative" }}
       >
         <ReactFlow
           nodes={nodes}
@@ -248,27 +215,19 @@ export default function App() {
         </ReactFlow>
       </div>
 
-      {mode === 'free' ? (
+      {mode === "free" ? (
         <NodePalette />
       ) : (
         <aside
           style={{
             width: 220,
-            borderLeft: '1px solid #ddd',
-            background: '#fafafa',
+            borderLeft: "1px solid #ddd",
+            background: "#fafafa",
             padding: 10,
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Açıklama</div>
-          {mode === 'ecb' && (
-            <p>ECB: Each block is encrypted independently (demo XOR).</p>
-          )}
-          {mode === 'cbc' && (
-            <p>CBC: Each block XORed with previous ciphertext (IV needed).</p>
-          )}
-          {mode === 'ctr' && (
-            <p>CTR: Counter/nonce keystream mode (coming soon).</p>
-          )}
+          {mode === "ecb" && <p>ECB: Each block is encrypted independently (demo XOR).</p>}
         </aside>
       )}
     </div>

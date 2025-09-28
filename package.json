@@ -2,7 +2,7 @@
   "name": "my-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://smsnaydi.github.io/mode-of-operation",
+  "homepage": ".",
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.8.0",
@@ -13,6 +13,7 @@
     "react-dom": "^19.1.1",
     "react-scripts": "5.0.1",
     "reactflow": "^11.11.4",
+    "resize-observer-polyfill": "^1.5.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

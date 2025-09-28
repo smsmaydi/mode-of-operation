@@ -1,8 +1,8 @@
 function bitStringToBytes(bits) {
-  const cleaned = (bits || '').replace(/[^01]/g, '');
+  const cleaned = (bits || "").replace(/[^01]/g, "");
   if (!cleaned) return new Uint8Array(0);
   const rem = cleaned.length % 8;
-  const padded = rem === 0 ? cleaned : cleaned + '0'.repeat(8 - rem);
+  const padded = rem === 0 ? cleaned : cleaned + "0".repeat(8 - rem);
   const out = new Uint8Array(padded.length / 8);
   for (let i = 0; i < out.length; i++) {
     const chunk = padded.slice(i * 8, i * 8 + 8);
@@ -17,17 +17,17 @@ export function xorImageFileWithKey(file, keyBits) {
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = img.width;
         canvas.height = img.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         ctx.drawImage(img, 0, 0);
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
         const data = imageData.data;
 
         const keyBytes = bitStringToBytes(keyBits);
         if (keyBytes.length === 0) {
-          reject('Invalid or empty key');
+          reject("Invalid or empty key");
           return;
         }
 
@@ -40,12 +40,12 @@ export function xorImageFileWithKey(file, keyBits) {
         }
 
         ctx.putImageData(imageData, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
+        resolve(canvas.toDataURL("image/png"));
       };
-      img.onerror = () => reject('Image load failed');
+      img.onerror = () => reject("Image load failed");
       img.src = ev.target.result;
     };
-    reader.onerror = () => reject('File read failed');
+    reader.onerror = () => reject("File read failed");
     reader.readAsDataURL(file);
   });
 }
