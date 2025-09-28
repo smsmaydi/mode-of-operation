@@ -16,11 +16,12 @@ export default function PlaintextNode({ id, data }) {
   };
 
   const onFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      data.onChange?.(id, { value: file });
-    }
-  };
+  const file = e.target.files?.[0];
+  if (file) {
+    data.onChange?.(id, { value: file });
+  }
+};
+
 
   return (
     <div style={{

@@ -6,11 +6,14 @@ export default function BlockCipherNode({ id, data }) {
 
   return (
     <div style={{
-      padding: 10, border: '1px solid #999', borderRadius: 6,
-      background: hasErr ? '#ffeaea' : '#fff', minWidth: 200,
+      padding: 10,
+      border: '1px solid #999',
+      borderRadius: 6,
+      background: hasErr ? '#ffeaea' : '#fff',
+      minWidth: 200,
       position: 'relative'
     }}>
-      {/* ❌ Silme butonu */}
+      {/* Delete button */}
       <button
         onClick={() => instance.deleteElements({ nodes: [{ id }] })}
         style={{
@@ -30,9 +33,8 @@ export default function BlockCipherNode({ id, data }) {
       <strong>Block Cipher</strong>
       <Handle type="target" position={Position.Left} id="plaintext" />
       <Handle type="target" position={Position.Right} id="key" />
-      <Handle type="target" position={Position.Top} id="key" />
       <div style={{ marginTop: 8, fontSize: 12, color: hasErr ? '#b00' : '#666' }}>
-        {hasErr ? data.error : (data?.preview ?? 'plaintext + key bağla')}
+        {hasErr ? data.error : (data?.preview ?? 'Connect plaintext + key')}
       </div>
       <Handle type="source" position={Position.Bottom} id="out" />
     </div>

@@ -18,6 +18,7 @@ import BlockCipherNode from './components/nodes/BlockCipherNode';
 import CiphertextNode from './components/nodes/CiphertextNode';
 
 import { computeGraphValues } from './utils/computeGraph';
+import { xorImageFileWithKey } from './utils/xorImageFile';
 import { buildPreset } from './utils/presets';
 import { makeIsValidConnection } from './utils/validators';
 
@@ -65,26 +66,48 @@ export default function App() {
       const preset = buildPreset(m);
 
       const withHandlers = preset.nodes.map((n) => {
-        if (n.type === 'plaintext' || n.type === 'key') {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              onChange: (id, patch) => {
-                setNodes((nds) => {
-                  const next = nds.map((nn) =>
-                    nn.id === id
-                      ? { ...nn, data: { ...nn.data, ...patch } }
-                      : nn
-                  );
-                  return computeGraphValues(next, edges);
-                });
-              },
-            },
-          };
-        }
-        return n;
-      });
+  if (n.type === 'plaintext' || n.type === 'key') {
+    return {
+      ...n,
+      data: {
+        ...n.data,
+        onChange: (id, patch) => {
+          setNodes((nds) => {
+            const next = nds.map((nn) =>
+              nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
+            );
+            return computeGraphValues(next, edges);
+          });
+        },
+        // ✅ artık nodes state'inden plaintext buluyoruz
+        onRunXor: (keyBits) => {
+  const plainNode = nodes.find((nn) => nn.type === 'plaintext');
+  if (plainNode?.data?.value instanceof File) {
+    xorImageFileWithKey(plainNode.data.value, keyBits).then((dataUrl) => {
+      setNodes((nds) =>
+        nds.map((nn) => {
+          if (nn.type === 'ciphertext') {
+            // Bu ciphertext BlockCipher ile bağlı mı?
+            const connected = edges.find(
+              (e) => e.target === nn.id && e.source.includes('b') // blockcipher source
+            );
+            if (connected) {
+              return { ...nn, data: { ...nn.data, result: dataUrl } };
+            }
+          }
+          return nn;
+        })
+      );
+    });
+  }
+}
+,
+      },
+    };
+  }
+  return n;
+});
+
 
       setNodes(computeGraphValues(withHandlers, preset.edges));
       setEdges(preset.edges);
