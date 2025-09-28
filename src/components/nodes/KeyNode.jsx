@@ -10,11 +10,10 @@ export default function KeyNode({ id, data }) {
   };
 
   const runXor = () => {
-    // sadece image için özel XOR
-    if (data.onRunXor) {
-      data.onRunXor(data.bits);
-    }
-  };
+  console.log("Run XOR pressed with key:", data.bits);
+  data.onRunXor?.(data.bits);
+};
+
 
   return (
     <div

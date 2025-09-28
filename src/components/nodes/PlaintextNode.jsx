@@ -4,8 +4,10 @@ export default function PlaintextNode({ id, data }) {
   const instance = useReactFlow();
 
   const onTypeChange = (e) => {
-    data.onChange?.(id, { inputType: e.target.value, value: '' });
-  };
+  console.log("🔄 Input type changed to:", e.target.value);
+  data.onChange?.(id, { inputType: e.target.value, value: '' });
+};
+
 
   const onValueChange = (e) => {
     let val = e.target.value;
@@ -17,10 +19,12 @@ export default function PlaintextNode({ id, data }) {
 
   const onFileChange = (e) => {
   const file = e.target.files?.[0];
+  console.log("📂 File selected:", file);
   if (file) {
-    data.onChange?.(id, { value: file });
+    data.onChange?.(id, { inputType: 'image', value: file });
   }
 };
+
 
 
   return (

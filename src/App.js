@@ -66,48 +66,58 @@ export default function App() {
       const preset = buildPreset(m);
 
       const withHandlers = preset.nodes.map((n) => {
-  if (n.type === 'plaintext' || n.type === 'key') {
-    return {
-      ...n,
-      data: {
-        ...n.data,
-        onChange: (id, patch) => {
-          setNodes((nds) => {
-            const next = nds.map((nn) =>
-              nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
-            );
-            return computeGraphValues(next, edges);
-          });
-        },
-        // ✅ artık nodes state'inden plaintext buluyoruz
-        onRunXor: (keyBits) => {
-  const plainNode = nodes.find((nn) => nn.type === 'plaintext');
-  if (plainNode?.data?.value instanceof File) {
-    xorImageFileWithKey(plainNode.data.value, keyBits).then((dataUrl) => {
-      setNodes((nds) =>
-        nds.map((nn) => {
-          if (nn.type === 'ciphertext') {
-            // Bu ciphertext BlockCipher ile bağlı mı?
-            const connected = edges.find(
-              (e) => e.target === nn.id && e.source.includes('b') // blockcipher source
-            );
-            if (connected) {
-              return { ...nn, data: { ...nn.data, result: dataUrl } };
-            }
-          }
-          return nn;
-        })
-      );
-    });
-  }
-}
-,
-      },
-    };
-  }
-  return n;
-});
+        if (n.type === 'plaintext' || n.type === 'key') {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              onChange: (id, patch) => {
+                console.log("📩 onChange patch for", id, patch);
+                setNodes((nds) => {
+                  const next = nds.map((nn) =>
+                    nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
+                  );
+                  return computeGraphValues(next, edges);
+                });
+              },
 
+              // ✅ Run XOR for image inputs
+              onRunXor: (keyBits) => {
+                console.log("onRunXor called with keyBits:", keyBits);
+
+                setNodes((nds) => {
+                  const plainNode = nds.find((nn) => nn.type === 'plaintext');
+                  console.log("PlainNode value:", plainNode?.data?.value);
+
+                  if (plainNode?.data?.value instanceof File) {
+                    xorImageFileWithKey(plainNode.data.value, keyBits).then(
+                      (dataUrl) => {
+                        console.log(
+                          "Image XOR done, dataUrl length:",
+                          dataUrl.length
+                        );
+                        setNodes((inner) =>
+                          inner.map((nn) =>
+                            nn.type === 'ciphertext'
+                              ? {
+                                  ...nn,
+                                  data: { ...nn.data, result: dataUrl },
+                                }
+                              : nn
+                          )
+                        );
+                      }
+                    );
+                  }
+
+                  return nds;
+                });
+              },
+            },
+          };
+        }
+        return n;
+      });
 
       setNodes(computeGraphValues(withHandlers, preset.edges));
       setEdges(preset.edges);
@@ -217,7 +227,11 @@ export default function App() {
     >
       <ModeMenu current={mode} onSelect={applyMode} />
 
-      <div onDrop={onDrop} onDragOver={onDragOver} style={{ position: 'relative' }}>
+      <div
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        style={{ position: 'relative' }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -246,9 +260,15 @@ export default function App() {
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Açıklama</div>
-          {mode === 'ecb' && <p>ECB: Her blok bağımsız şifrelenir (şimdilik demo XOR).</p>}
-          {mode === 'cbc' && <p>CBC: Her blok, önceki ciphertext ile XOR (IV gerekecek).</p>}
-          {mode === 'ctr' && <p>CTR: Sayaç/nonce ile keystream üretimi (gelecek).</p>}
+          {mode === 'ecb' && (
+            <p>ECB: Each block is encrypted independently (demo XOR).</p>
+          )}
+          {mode === 'cbc' && (
+            <p>CBC: Each block XORed with previous ciphertext (IV needed).</p>
+          )}
+          {mode === 'ctr' && (
+            <p>CTR: Counter/nonce keystream mode (coming soon).</p>
+          )}
         </aside>
       )}
     </div>

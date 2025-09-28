@@ -50,6 +50,7 @@ export function computeGraphValues(nodes, edges) {
   });
 
   // BlockCipher
+  // BlockCipher
   nodes.forEach((n) => {
     if (n.type === 'blockcipher') {
       const inc = incoming(n.id);
@@ -78,9 +79,11 @@ export function computeGraphValues(nodes, edges) {
       } else if (pType === 'image') {
         // image handled by Run XOR button
         n.data = { ...n.data, preview: 'Ready for Run XOR' };
+        valueMap.set(n.id, { type: 'image', value: pVal });   // ✅ burada ekli
       }
     }
   });
+
 
   // Ciphertext rendering
   nodes.forEach((n) => {

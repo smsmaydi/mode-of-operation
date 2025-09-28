@@ -3,13 +3,9 @@ import { Handle, Position, useReactFlow } from 'reactflow';
 export default function CiphertextNode({ id, data }) {
   const instance = useReactFlow();
 
-  // check both result and outUrl for image
-  const imageSrc =
-    (typeof data?.result === 'string' && data.result.startsWith('data:image'))
-      ? data.result
-      : (typeof data?.outUrl === 'string' && data.outUrl.startsWith('data:image'))
-        ? data.outUrl
-        : null;
+  // Check if result is an image URL (data:image/...)
+  const isImageUrl =
+    typeof data?.result === 'string' && data.result.startsWith('data:image');
 
   return (
     <div
@@ -43,22 +39,26 @@ export default function CiphertextNode({ id, data }) {
       <Handle type="target" position={Position.Top} id="in" />
 
       <div style={{ marginTop: 8, textAlign: 'center' }}>
-        {imageSrc ? (
+        {isImageUrl ? (
           <>
             <img
-              src={imageSrc}
+              src={data.result}
               alt="cipher"
               style={{ maxWidth: '100%', borderRadius: 4 }}
             />
             <div style={{ marginTop: 6 }}>
-              <a href={imageSrc} download="cipher.png">
+              <a href={data.result} download="cipher.png">
                 Download
               </a>
             </div>
           </>
         ) : (
           <div style={{ fontFamily: 'monospace' }}>
-            {data?.result ?? '— (connect BlockCipher)'}
+            {typeof data?.result === 'string'
+              ? data.result
+              : data?.result instanceof File
+              ? '📂 Image selected (waiting for Run XOR)'
+              : '— (connect BlockCipher)'}
           </div>
         )}
       </div>
