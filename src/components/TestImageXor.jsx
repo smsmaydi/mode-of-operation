@@ -16,18 +16,18 @@ export default function TestImageXor() {
 
   const runXor = async () => {
     if (!file) {
-      alert('Lütfen önce bir resim yükle');
+      alert('Please upload an image first');
       return;
     }
     if (!key) {
-      alert('Lütfen bir key gir');
+      alert('Please enter key bits');
       return;
     }
     try {
       const url = await xorImageFileWithKey(file, key);
       setOutUrl(url);
     } catch (err) {
-      alert('Hata: ' + err);
+      alert('Error: ' + err);
     }
   };
 

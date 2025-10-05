@@ -5,7 +5,7 @@ export function buildEcbPreset() {
     {
       id: 'p1',
       type: 'plaintext',
-      position: { x: 80, y: 40 },
+      position: { x: 280, y: -50 },
       data: {
         inputType: 'bits',
         value: '10110010',
@@ -14,7 +14,7 @@ export function buildEcbPreset() {
     {
       id: 'k1',
       type: 'key',
-      position: { x: 340, y: 40 },
+      position: { x: -100, y: 140 },
       data: {
         bits: '01010101',
       }
@@ -24,9 +24,9 @@ export function buildEcbPreset() {
   ];
 
   const edges = [
-    { id: 'e-p-b', source: 'p1', sourceHandle: 'out', target: 'b1', targetHandle: 'plaintext' },
-    { id: 'e-k-b', source: 'k1', sourceHandle: 'out', target: 'b1', targetHandle: 'key' },
-    { id: 'e-b-c', source: 'b1', sourceHandle: 'out', target: 'c1', targetHandle: 'in' },
+    { id: 'e-p-b', source: 'p1', sourceHandle: 'out', target: 'b1', targetHandle: 'plaintext', animated: true, data: {}, style: { stroke: 'lightgreen' } },
+    { id: 'e-k-b', source: 'k1', sourceHandle: 'out', target: 'b1', targetHandle: 'key', animated: true, data: {}, style: { stroke: 'lightblue' } },
+    { id: 'e-b-c', source: 'b1', sourceHandle: 'out', target: 'c1', targetHandle: 'in', animated: true, data: {}, style: { stroke: 'orange' } },
   ];
 
   return { nodes, edges };

@@ -15,7 +15,7 @@ export default function KeyNode({ id, data }) {
         padding: 10,
         border: "1px solid #666",
         borderRadius: 6,
-        background: "#eef",
+        background: "lightblue",
         position: "relative",
         minWidth: 200,
       }}
@@ -45,7 +45,7 @@ export default function KeyNode({ id, data }) {
           placeholder="ör. 11001010"
         />
       </div>
-      <Handle type="source" position={Position.Bottom} id="out" />
+      <Handle type="source" position={Position.Right} id="out" />
     </div>
   );
 }

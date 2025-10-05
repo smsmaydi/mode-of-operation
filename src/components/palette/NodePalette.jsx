@@ -24,7 +24,7 @@ export default function NodePalette() {
       <Item label="BlockCipher" type="blockcipher" />
       <Item label="Ciphertext"  type="ciphertext" />
       <div style={{ fontSize: 12, color: '#666' }}>
-        Sürükleyip canvas’a bırak.
+        Drag & Drop to the canvas.
       </div>
     </aside>
   );

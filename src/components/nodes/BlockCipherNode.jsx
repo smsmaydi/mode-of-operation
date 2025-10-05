@@ -24,11 +24,12 @@ export default function BlockCipherNode({ id, data }) {
       const dataUrl = await xorImageFileWithKey(plaintextFile, keyBits);
       instance.setNodes((nds) =>
         nds.map((nn) =>
-          nn.type === "ciphertext"
-            ? { ...nn, data: { ...nn.data, result: dataUrl } }
+          nn.id === id
+            ? { ...nn, data: { ...nn.data, preview: dataUrl } }
             : nn
         )
       );
+
       console.log("BlockCipher: XOR tamam, ciphertext updated");
     } catch (err) {
       console.error("BlockCipher: XOR hata", err);
@@ -41,7 +42,7 @@ export default function BlockCipherNode({ id, data }) {
         padding: 10,
         border: "1px solid #333",
         borderRadius: 6,
-        background: "#efe",
+        background: "Orange",
         minWidth: 200,
         position: "relative",
       }}
@@ -63,12 +64,15 @@ export default function BlockCipherNode({ id, data }) {
       </button>
 
       <strong>BlockCipher (XOR)</strong>
-      <Handle type="target" position={Position.Top} id="plaintext" />
-      <Handle type="target" position={Position.Left} id="key" />
-      <Handle type="source" position={Position.Bottom} id="out" />
+      <Handle type="target" position={Position.Top}     id="plaintext"  style={{ background: "lightgreen" }} />
+      <Handle type="target" position={Position.Right}   id="key"        style={{ background: "lightblue" }} />
+      <Handle type="target" position={Position.Left}    id="prevCipher" style={{ background: "pink", top: "30%" }} />
+      <Handle type="target" position={Position.Left}    id="iv"         style={{ background: "#ff0", top: "70%" }} />
+      <Handle type="source" position={Position.Bottom}  id="out"        style={{ background: "#000" }} />
+
 
       <div style={{ marginTop: 10 }}>
-        <button onClick={runXor}>Run XOR</button>
+        <button onClick={() => data.onRunXor?.(id)}>Run XOR</button>
       </div>
       <div style={{ marginTop: 6, fontSize: 12 }}>
         {data.preview || "Connect plaintext + key"}

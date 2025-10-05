@@ -7,6 +7,15 @@ import reportWebVitals from "./reportWebVitals";
 const resizeObserverErr = /ResizeObserver loop completed/;
 const resizeObserverWarn = /ResizeObserver loop limit exceeded/;
 
+console.error = (function (orig) {
+  return function (...args) {
+    if (typeof args[0] === "string" && args[0].includes("ResizeObserver")) return;
+    orig(...args);
+  };
+})(console.error);
+
+
+
 const handler = (e) => {
   if (resizeObserverErr.test(e.message) || resizeObserverWarn.test(e.message)) {
     e.stopImmediatePropagation();
@@ -25,9 +34,7 @@ window.addEventListener("unhandledrejection", (e) => {
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+     <App />
 );
 
 reportWebVitals();

@@ -5,6 +5,7 @@ import ReactFlow, {
   useNodesState,
   Controls,
   Background,
+  MiniMap,
 } from "reactflow";
 
 import "reactflow/dist/style.css";
@@ -28,12 +29,59 @@ const nodeTypes = {
   ciphertext: CiphertextNode,
 };
 
+// --- Image XOR helper ---
+function xorImage(file, keyBits, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const buffer = new Uint8Array(e.target.result);
+
+    const key = keyBits.match(/.{1,8}/g).map((b) => parseInt(b, 2));
+    const outBuffer = buffer.map((byte, i) => byte ^ key[i % key.length]);
+
+    const blob = new Blob([outBuffer], { type: file.type });
+    const url = URL.createObjectURL(blob);
+    callback(url);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 export default function App() {
   const [mode, setMode] = useState("ecb");
 
   const initial = useMemo(() => buildPreset(mode), [mode]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+
+  // ✅ Run XOR for image
+  const onRunXor = useCallback(
+  (blockId) => {
+    setNodes((nds) => {
+      const block = nds.find((n) => n.id === blockId);
+      if (!block || !block.data.plaintextFile || !block.data.keyBits) {
+        alert("Missing image or key!");
+        return nds;
+      }
+
+      xorImage(block.data.plaintextFile, block.data.keyBits, (url) => {
+        setNodes((inner) =>
+          computeGraphValues(
+            inner.map((n) =>
+              n.id === blockId
+                ? { ...n, data: { ...n.data, preview: url } }
+                : n
+            ),
+            edges
+          )
+        );
+      });
+
+      return nds;
+    });
+  },
+  [setNodes, edges]
+);
+
+
 
   // Node silme
   const onNodesDelete = useCallback(
@@ -64,7 +112,7 @@ export default function App() {
       setMode(m);
       const preset = buildPreset(m);
 
-      // inject onChange callbacks & defaults into plaintext/key nodes
+      // inject onChange + onRunXor into plaintext/key/blockcipher nodes
       const withHandlers = preset.nodes.map((n) => {
         if (n.type === "plaintext" || n.type === "key") {
           return {
@@ -72,14 +120,24 @@ export default function App() {
             data: {
               ...n.data,
               onChange: (id, patch) => {
-                console.log("📩 onChange patch for", id, patch);
                 setNodes((nds) => {
                   const next = nds.map((nn) =>
-                    nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
+                    nn.id === id
+                      ? { ...nn, data: { ...nn.data, ...patch } }
+                      : nn
                   );
                   return computeGraphValues(next, preset.edges);
                 });
               },
+            },
+          };
+        }
+        if (n.type === "blockcipher") {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              onRunXor, // ✅ buraya bağladık
             },
           };
         }
@@ -89,7 +147,7 @@ export default function App() {
       setNodes(computeGraphValues(withHandlers, preset.edges));
       setEdges(preset.edges);
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, onRunXor]
   );
 
   React.useEffect(() => {
@@ -142,6 +200,7 @@ export default function App() {
             return computeGraphValues(next, edges);
           });
         },
+        onRunXor, // yeni node’lara da Run XOR bağla
       };
 
       const newNode = {
@@ -156,7 +215,7 @@ export default function App() {
 
       setNodes((nds) => computeGraphValues(nds.concat(newNode), edges));
     },
-    [mode, edges, setNodes]
+    [mode, edges, setNodes, onRunXor]
   );
 
   const onDragOver = useCallback(
@@ -210,6 +269,7 @@ export default function App() {
           onConnect={onConnect}
           fitView
         >
+          <MiniMap />
           <Controls />
           <Background />
         </ReactFlow>
@@ -226,8 +286,10 @@ export default function App() {
             padding: 10,
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Açıklama</div>
-          {mode === "ecb" && <p>ECB: Each block is encrypted independently (demo XOR).</p>}
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Description</div>
+          {mode === "ecb" && (
+            <p>ECB: Each block is encrypted independently (demo XOR).</p>
+          )}
         </aside>
       )}
     </div>

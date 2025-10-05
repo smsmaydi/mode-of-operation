@@ -16,7 +16,7 @@ export function bitStringToBytes(bits) {
   return out;
 }
 
-// File → XOR → dataURL döner
+// File → XOR → dataURL 
 export function xorImageFileWithKey(file, keyBits) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

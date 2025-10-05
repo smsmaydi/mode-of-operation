@@ -27,8 +27,56 @@ function baseRules(params, nodes) {
 
 // Mode’a göre farklı kural seti döndürmek için factory
 export function makeIsValidConnection(mode) {
-  return function isValidConnection(params, nodes) {
-    // Şimdilik mode’a bakmadan hep aynı kuralı dönüyoruz
-    return baseRules(params, nodes);
+  return (params, nodes) => {
+    const sourceNode = nodes.find((n) => n.id === params.source);
+    const targetNode = nodes.find((n) => n.id === params.target);
+
+    // BlockCipher -> Ciphertext (ECB / Free)
+    if (
+      (mode === "ecb" || mode === "free") &&
+      sourceNode?.type === "blockcipher" &&
+      targetNode?.type === "ciphertext" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "in"
+    ) {
+      return true;
+    }
+
+    // Ciphertext -> BlockCipher.prevCipher (CBC chaining)
+    if (
+      (mode === "cbc" || mode === "free") &&
+      sourceNode?.type === "ciphertext" &&
+      targetNode?.type === "blockcipher" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "prevCipher"
+    ) {
+      return true;
+    }
+
+    // Plaintext -> BlockCipher
+    if (
+      sourceNode?.type === "plaintext" &&
+      targetNode?.type === "blockcipher" &&
+      params.targetHandle === "plaintext"
+    ) return true;
+
+    // Key -> BlockCipher
+    if (
+      sourceNode?.type === "key" &&
+      targetNode?.type === "blockcipher" &&
+      params.targetHandle === "key"
+    ) return true;
+
+    // IV -> BlockCipher (map to prevCipher)
+    if (
+      sourceNode?.type === "iv" &&
+      targetNode?.type === "blockcipher" &&
+      params.targetHandle === "prevCipher"
+    ) return true;
+
+    return false;
   };
 }
+
+
+

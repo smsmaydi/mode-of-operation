@@ -23,14 +23,14 @@ export default function ModeMenu({ current, onSelect }) {
             border: 'none',
             background: current === m.id ? '#e8f0fe' : 'transparent',
             cursor: 'pointer',
-            fontWeight: current === m.id ? 700 : 500
+            fontWeight: current === m.id ? 700 : 300
           }}
         >
           {m.label}
         </button>
       ))}
       <div style={{ padding: 12, fontSize: 12, color: '#666' }}>
-        Bir moda tıkla; canvas hazır kurulumla gelsin.
+        Click a mode.
       </div>
     </aside>
   );
