@@ -89,29 +89,40 @@ export function computeGraphValues(nodes, edges) {
 
       // Take image file and prepare for XOR
       if (pType === "image") {
-        if (n.data.preview?.startsWith("data:image") || n.data.preview?.startsWith("blob:")) {
-          valueMap.set(n.id, {
-            type: "image",
-            value: n.data.preview,
-            keyBits: kVal,
-          });
-        } else {
+        // If a new file is selected (different reference), reset preview
+        if (pVal !== n.data.plaintextFile) {
           n.data = {
             ...n.data,
             preview: "Ready for Run XOR",
             plaintextFile: pVal,
             keyBits: kVal,
           };
+        } else if (n.data.preview?.startsWith("data:image") || n.data.preview?.startsWith("blob:")) {
+          // Keep existing XOR result
           valueMap.set(n.id, {
             type: "image",
-            value: pVal,
+            value: n.data.preview,
             keyBits: kVal,
           });
+        } else {
+          // Default case, prepare for XOR
+          n.data = {
+            ...n.data,
+            preview: "Ready for Run XOR",
+            plaintextFile: pVal,
+            keyBits: kVal,
+          };
         }
 
-        // Stop processing after image setup
-        return; // ✅ MUST EXIST
+        valueMap.set(n.id, {
+          type: "image",
+          value: pVal,
+          keyBits: kVal,
+        });
+
+        return; // stop processing after image setup
       }
+
 
 
 
