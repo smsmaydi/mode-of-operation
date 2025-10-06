@@ -5,37 +5,6 @@ import { xorImageFileWithKey } from "../../utils/xorImageFile";
 export default function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
 
-  const runXor = async () => {
-    const plaintextFile = data?.plaintextFile;
-    const keyBits = data?.keyBits;
-
-    console.log("BlockCipher: runXor got", { plaintextFile, keyBits });
-
-    if (!(plaintextFile instanceof File)) {
-      console.warn("Run XOR: plaintext File yok");
-      return;
-    }
-    if (!keyBits || keyBits.replace(/[^01]/g, "").length === 0) {
-      console.warn("Run XOR: keyBits yok veya boş");
-      return;
-    }
-
-    try {
-      const dataUrl = await xorImageFileWithKey(plaintextFile, keyBits);
-      instance.setNodes((nds) =>
-        nds.map((nn) =>
-          nn.id === id
-            ? { ...nn, data: { ...nn.data, preview: dataUrl } }
-            : nn
-        )
-      );
-
-      console.log("BlockCipher: XOR tamam, ciphertext updated");
-    } catch (err) {
-      console.error("BlockCipher: XOR hata", err);
-    }
-  };
-
   return (
     <div
       style={{
@@ -74,9 +43,7 @@ export default function BlockCipherNode({ id, data }) {
       <div style={{ marginTop: 10 }}>
         <button onClick={() => data.onRunXor?.(id)}>Run XOR</button>
       </div>
-      <div style={{ marginTop: 6, fontSize: 12 }}>
-        {data.preview || "Connect plaintext + key"}
-      </div>
+      
     </div>
   );
 }

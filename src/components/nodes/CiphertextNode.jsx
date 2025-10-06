@@ -4,9 +4,15 @@ import { Handle, Position, useReactFlow } from "reactflow";
 export default function CiphertextNode({ id, data }) {
   const instance = useReactFlow();
 
+  // 🔍 Resim mi kontrol et
+  // Detect image not only after XOR, but also when plaintext is an image
   const isImage =
-    typeof data?.result === "string" &&
-    (data.result.startsWith("blob:") || data.result.startsWith("data:image"));
+    (typeof data?.result === "string" &&
+      (data.result.startsWith("blob:") || data.result.startsWith("data:image"))) ||
+    (data?.preview === "Ready for Run XOR") ||
+    (data?.result === "Ready for Run XOR");
+  console.log("CipherNode render:", data.result, "isImage:", isImage);
+    
 
   const handleCopy = () => {
     if (data?.fullBinary) {
@@ -14,6 +20,8 @@ export default function CiphertextNode({ id, data }) {
       alert("Binary copied to clipboard!");
     }
   };
+
+  console.log("CipherNode render:", data?.result);
 
   return (
     <div
@@ -48,6 +56,7 @@ export default function CiphertextNode({ id, data }) {
 
       <div style={{ marginTop: 8, textAlign: "center" }}>
         {isImage ? (
+          // 🔵 Eğer resim varsa sadece img göster
           <>
             <img
               src={data.result}
@@ -61,6 +70,7 @@ export default function CiphertextNode({ id, data }) {
             </div>
           </>
         ) : (
+          // 🔴 Değilse normal metin/bit çıktısı göster
           <>
             <textarea
               readOnly

@@ -9,6 +9,7 @@ import ReactFlow, {
 } from "reactflow";
 
 import "reactflow/dist/style.css";
+import { xorImageFileWithKey } from "./utils/imageXor";
 
 import ModeMenu from "./components/layout/ModeMenu";
 import NodePalette from "./components/palette/NodePalette";
@@ -30,20 +31,20 @@ const nodeTypes = {
 };
 
 // --- Image XOR helper ---
-function xorImage(file, keyBits, callback) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const buffer = new Uint8Array(e.target.result);
+// function xorImage(file, keyBits, callback) {
+//   const reader = new FileReader();
+//   reader.onload = (e) => {
+//     const buffer = new Uint8Array(e.target.result);
 
-    const key = keyBits.match(/.{1,8}/g).map((b) => parseInt(b, 2));
-    const outBuffer = buffer.map((byte, i) => byte ^ key[i % key.length]);
+//     const key = keyBits.match(/.{1,8}/g).map((b) => parseInt(b, 2));
+//     const outBuffer = buffer.map((byte, i) => byte ^ key[i % key.length]);
 
-    const blob = new Blob([outBuffer], { type: file.type });
-    const url = URL.createObjectURL(blob);
-    callback(url);
-  };
-  reader.readAsArrayBuffer(file);
-}
+//     const blob = new Blob([outBuffer], { type: file.type });
+//     const url = URL.createObjectURL(blob);
+//     callback(url);
+//   };
+//   reader.readAsArrayBuffer(file);
+// }
 
 export default function App() {
   const [mode, setMode] = useState("ecb");
@@ -52,34 +53,51 @@ export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
 
-  // ✅ Run XOR for image
+  // ✅ Run XOR for image (old working version)
+  // ✅ Run XOR for image (callback style)
   const onRunXor = useCallback(
-  (blockId) => {
-    setNodes((nds) => {
-      const block = nds.find((n) => n.id === blockId);
-      if (!block || !block.data.plaintextFile || !block.data.keyBits) {
-        alert("Missing image or key!");
+    (blockId) => {
+      setNodes((nds) => {
+        const block = nds.find((n) => n.id === blockId);
+        if (!block || !block.data.plaintextFile || !block.data.keyBits) {
+          alert("Missing image or key!");
+          return nds;
+        }
+
+        console.log("🔵 Run XOR triggered for block:", blockId);
+
+        // Callback-based XOR execution
+        xorImageFileWithKey(block.data.plaintextFile, block.data.keyBits)
+          .then((url) => {
+            console.log("✅ XOR done, URL:", url);
+
+            // Update preview of this blockcipher node
+            setNodes((inner) =>
+              computeGraphValues(
+                inner.map((n) =>
+                  n.id === blockId
+                    ? { ...n, data: { ...n.data, preview: url } }
+                    : n
+                ),
+                edges
+              )
+            );
+          })
+          .catch((err) => {
+            console.error("❌ XOR Error:", err);
+            alert("Image XOR failed: " + err);
+          });
+
         return nds;
-      }
-
-      xorImage(block.data.plaintextFile, block.data.keyBits, (url) => {
-        setNodes((inner) =>
-          computeGraphValues(
-            inner.map((n) =>
-              n.id === blockId
-                ? { ...n, data: { ...n.data, preview: url } }
-                : n
-            ),
-            edges
-          )
-        );
       });
+    },
+    [setNodes, edges]
+  );
 
-      return nds;
-    });
-  },
-  [setNodes, edges]
-);
+
+
+
+
 
 
 
