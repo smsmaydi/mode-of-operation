@@ -18,6 +18,7 @@ import PlaintextNode from "./components/nodes/PlaintextNode";
 import KeyNode from "./components/nodes/KeyNode";
 import BlockCipherNode from "./components/nodes/BlockCipherNode";
 import CiphertextNode from "./components/nodes/CiphertextNode";
+import IVNode from "./components/nodes/IVNode";
 
 import { computeGraphValues } from "./utils/computeGraph";
 import { buildPreset } from "./utils/presets";
@@ -28,23 +29,8 @@ const nodeTypes = {
   key: KeyNode,
   blockcipher: BlockCipherNode,
   ciphertext: CiphertextNode,
+  iv: IVNode,
 };
-
-// --- Image XOR helper ---
-// function xorImage(file, keyBits, callback) {
-//   const reader = new FileReader();
-//   reader.onload = (e) => {
-//     const buffer = new Uint8Array(e.target.result);
-
-//     const key = keyBits.match(/.{1,8}/g).map((b) => parseInt(b, 2));
-//     const outBuffer = buffer.map((byte, i) => byte ^ key[i % key.length]);
-
-//     const blob = new Blob([outBuffer], { type: file.type });
-//     const url = URL.createObjectURL(blob);
-//     callback(url);
-//   };
-//   reader.readAsArrayBuffer(file);
-// }
 
 export default function App() {
   const [mode, setMode] = useState("ecb");
@@ -53,40 +39,49 @@ export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
 
-  // ✅ Run XOR for image (old working version)
-  // ✅ Run XOR for image (callback style)
+  // Run XOR for image 
   const onRunXor = useCallback(
     (blockId) => {
       setNodes((nds) => {
         const block = nds.find((n) => n.id === blockId);
-        if (!block || !block.data.plaintextFile || !block.data.keyBits) {
-          alert("Missing image or key!");
-          return nds;
+        if (!block) return nds;
+
+        const isImageMode = !!block.data.plaintextFile;
+
+        // --- IMAGE MODE ---
+        if (isImageMode) {
+          const file = block.data.plaintextFile;
+          const keyBits = block.data.keyBits;
+
+          if (!file || !keyBits) {
+            alert("Missing image or key!");
+            return nds;
+          }
+
+          
+          // Run Xor everytime with current key
+          xorImageFileWithKey(file, keyBits)
+            .then((url) => {
+              setNodes((inner) =>
+                computeGraphValues(
+                  inner.map((n) =>
+                    n.id === blockId
+                      ? { ...n, data: { ...n.data, preview: url } }
+                      : n
+                  ),
+                  edges
+                )
+              );
+            })
+            .catch((err) => {
+              alert("Image XOR failed: " + err);
+            });
         }
 
-        console.log("🔵 Run XOR triggered for block:", blockId);
-
-        // Callback-based XOR execution
-        xorImageFileWithKey(block.data.plaintextFile, block.data.keyBits)
-          .then((url) => {
-            console.log("✅ XOR done, URL:", url);
-
-            // Update preview of this blockcipher node
-            setNodes((inner) =>
-              computeGraphValues(
-                inner.map((n) =>
-                  n.id === blockId
-                    ? { ...n, data: { ...n.data, preview: url } }
-                    : n
-                ),
-                edges
-              )
-            );
-          })
-          .catch((err) => {
-            console.error("❌ XOR Error:", err);
-            alert("Image XOR failed: " + err);
-          });
+        // --- TEXT / BITS MODE ---
+        else {
+          setNodes((inner) => computeGraphValues(inner, edges));
+        }
 
         return nds;
       });
@@ -98,10 +93,7 @@ export default function App() {
 
 
 
-
-
-
-  // Node silme
+  // Node delete
   const onNodesDelete = useCallback(
     (deleted) => {
       setNodes((nds) =>
@@ -116,7 +108,7 @@ export default function App() {
     [setNodes, setEdges]
   );
 
-  // Edge silme
+  // Edge delete
   const onEdgesDelete = useCallback(
     (deleted) => {
       setEdges((eds) => eds.filter((e) => !deleted.find((d) => d.id === e.id)));
@@ -124,49 +116,52 @@ export default function App() {
     [setEdges]
   );
 
-  // Mode değişince preset yükle
+  // When mode changes, apply preset
   const applyMode = useCallback(
-    (m) => {
-      setMode(m);
-      const preset = buildPreset(m);
+  (m) => {
+    setMode(m);
+    const preset = buildPreset(m);
 
-      // inject onChange + onRunXor into plaintext/key/blockcipher nodes
-      const withHandlers = preset.nodes.map((n) => {
-        if (n.type === "plaintext" || n.type === "key") {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              onChange: (id, patch) => {
-                setNodes((nds) => {
-                  const next = nds.map((nn) =>
-                    nn.id === id
-                      ? { ...nn, data: { ...nn.data, ...patch } }
-                      : nn
-                  );
-                  return computeGraphValues(next, preset.edges);
-                });
-              },
+    // inject onChange + onRunXor into plaintext/key/blockcipher nodes
+    const withHandlers = preset.nodes.map((n) => {
+      if (n.type === "plaintext" || n.type === "key") {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            onChange: (id, patch) => {
+              setNodes((nds) => {
+                const next = nds.map((nn) =>
+                  nn.id === id
+                    ? { ...nn, data: { ...nn.data, ...patch } }
+                    : nn
+                );
+                // 🔹 sadece graf güncellemesi
+                return computeGraphValues(next, preset.edges);
+              });
             },
-          };
-        }
-        if (n.type === "blockcipher") {
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              onRunXor, // ✅ buraya bağladık
-            },
-          };
-        }
-        return n;
-      });
+          },
+        };
+      }
 
-      setNodes(computeGraphValues(withHandlers, preset.edges));
-      setEdges(preset.edges);
-    },
-    [setNodes, setEdges, onRunXor]
-  );
+      if (n.type === "blockcipher") {
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            onRunXor,
+          },
+        };
+      }
+      return n;
+    });
+
+    setNodes(computeGraphValues(withHandlers, preset.edges));
+    setEdges(preset.edges);
+  },
+  [setNodes, setEdges, onRunXor]
+);
+
 
   React.useEffect(() => {
     applyMode(mode);
@@ -186,7 +181,8 @@ export default function App() {
       if (!isValidConnection(params)) return;
       setEdges((eds) => {
         const next = addEdge(params, eds);
-        setNodes((nds) => computeGraphValues([...nds], next));
+        // setNodes((nds) => computeGraphValues([...nds], next));
+        setNodes((nds) => computeGraphValues(nds, next));
         return next;
       });
     },
@@ -231,7 +227,8 @@ export default function App() {
             : { ...dataBase },
       };
 
-      setNodes((nds) => computeGraphValues(nds.concat(newNode), edges));
+      setNodes((nds) => computeGraphValues(nds, edges));
+
     },
     [mode, edges, setNodes, onRunXor]
   );
@@ -248,7 +245,8 @@ export default function App() {
   const handleNodesChange = useCallback(
     (changes) => {
       onNodesChange(changes);
-      setNodes((nds) => computeGraphValues([...nds], edges));
+      setNodes((nds) => computeGraphValues(nds, edges));
+
     },
     [onNodesChange, edges]
   );
@@ -256,7 +254,7 @@ export default function App() {
   const handleEdgesChange = useCallback(
     (changes) => {
       onEdgesChange(changes);
-      setNodes((nds) => computeGraphValues([...nds], edges));
+      setNodes((nds) => computeGraphValues(nds, edges));
     },
     [onEdgesChange, edges]
   );

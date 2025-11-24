@@ -9,6 +9,7 @@ export default function KeyNode({ id, data }) {
     data.onChange?.(id, { bits: cleaned });
   };
 
+  console.log("Render:", KeyNode);
   return (
     <div
       style={{
@@ -42,7 +43,7 @@ export default function KeyNode({ id, data }) {
           style={{ width: "100%", fontFamily: "monospace" }}
           value={data.bits || ""}
           onChange={onChange}
-          placeholder="ör. 11001010"
+          placeholder="for example 11001010"
         />
       </div>
       <Handle type="source" position={Position.Right} id="out" />

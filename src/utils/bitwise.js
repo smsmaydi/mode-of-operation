@@ -1,20 +1,22 @@
+// a = plain Value
+// b = key Value
 export function xorBits(a = '', b = '') {
   if (!/^[01]*$/.test(a) || !/^[01]*$/.test(b)) {
-    return { error: 'Geçersiz bit dizisi' };
+    return { error: 'Invalid bit string' };
   }
   if (a.length === 0 || b.length === 0) {
-    return { error: 'Boş giriş' };
+    return { error: 'Empty input' };
   }
 
-  // 🔹 Key'i tekrar ederek uzunluk eşitle
+  // 🔹 Repeat key to get the same length
   let A = a;
   let B = b;
   if (a.length !== b.length) {
     if (b.length < a.length) {
-      // key'i tekrar et
+      // Repeat key
       B = b.repeat(Math.ceil(a.length / b.length)).slice(0, a.length);
     } else {
-      // plaintext kısa → plaintext'i pad'le
+      // If key is short, pad with zeros
       A = a.padEnd(b.length, '0');
     }
   }

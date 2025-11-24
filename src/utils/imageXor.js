@@ -33,16 +33,19 @@ export function xorImageFileWithKey(file, keyBits) {
 
         const keyBytes = bitStringToBytes(keyBits);
         if (keyBytes.length === 0) {
-          reject('Key geçersiz');
+          reject('Key is not valid.');
           return;
         }
 
+
+        // data Array is in RGBA format (4 bytes per pixel) 
+        // First 3 bytes are color channels, 4th is alpha (transparency)
         let ki = 0;
         for (let i = 0; i < data.length; i += 4) {
           data[i]     = data[i] ^ keyBytes[ki]; // R
           data[i + 1] = data[i + 1] ^ keyBytes[ki]; // G
           data[i + 2] = data[i + 2] ^ keyBytes[ki]; // B
-          // alpha (i+3) sabit bırakılır
+          // alpha (i+3) stays the same : data[i + 3]
           ki = (ki + 1) % keyBytes.length;
         }
 

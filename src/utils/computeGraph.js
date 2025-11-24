@@ -20,6 +20,12 @@ function binaryToText(binStr) {
 }
 
 export function computeGraphValues(nodes, edges) {
+  // 🧠 Prevent unnecessary processing
+  if (!nodes || !edges) return nodes;
+
+  // Store original state for comparison
+  const original = JSON.stringify(nodes);
+
   const valueMap = new Map();
   const incoming = (id) => edges.filter((e) => e.target === id);
 
@@ -89,7 +95,7 @@ export function computeGraphValues(nodes, edges) {
 
       // Take image file and prepare for XOR
       if (pType === "image") {
-        // If a new file is selected (different reference), reset preview
+        // Eğer yeni dosya seçildiyse sıfırla
         if (pVal !== n.data.plaintextFile) {
           n.data = {
             ...n.data,
@@ -97,19 +103,10 @@ export function computeGraphValues(nodes, edges) {
             plaintextFile: pVal,
             keyBits: kVal,
           };
-        } else if (n.data.preview?.startsWith("data:image") || n.data.preview?.startsWith("blob:")) {
-          // Keep existing XOR result
-          valueMap.set(n.id, {
-            type: "image",
-            value: n.data.preview,
-            keyBits: kVal,
-          });
         } else {
-          // Default case, prepare for XOR
+          // Aynı dosya ama key değişmiş olabilir → keyBits'i her zaman güncelle
           n.data = {
             ...n.data,
-            preview: "Ready for Run XOR",
-            plaintextFile: pVal,
             keyBits: kVal,
           };
         }
@@ -120,10 +117,8 @@ export function computeGraphValues(nodes, edges) {
           keyBits: kVal,
         });
 
-        return; // stop processing after image setup
+        return;
       }
-
-
 
 
       // 🔵 TEXT / BITS CASE: calculate XOR
@@ -191,7 +186,10 @@ export function computeGraphValues(nodes, edges) {
       // Find connected blockcipher node (if any)
       const connectedBlockEdge = inc.find((e) => {
         const src = nodes.find((b) => b.id === e.source);
-        return src?.type === "blockcipher" && (!e.targetHandle || e.targetHandle === "in");
+        return (
+          src?.type === "blockcipher" &&
+          (!e.targetHandle || e.targetHandle === "in")
+        );
       });
 
       const block = connectedBlockEdge
@@ -202,18 +200,17 @@ export function computeGraphValues(nodes, edges) {
         n.data = { ...n.data, result: "", fullBinary: undefined };
       } else {
         // 📸 IMAGE CHECK – look for both preview and result
-        const possibleImage = block.data.preview || block.data.result || n.data.result;
+        const possibleImage =
+          block.data.preview || block.data.result || n.data.result;
         const isImage =
           typeof possibleImage === "string" &&
           (possibleImage.startsWith("data:image") ||
-          possibleImage.startsWith("blob:"));
+            possibleImage.startsWith("blob:"));
 
         if (isImage) {
           n.data = { ...n.data, result: possibleImage };
           valueMap.set(n.id, { type: "image", value: possibleImage });
-          console.log("🟢 Ciphertext: Image detected", possibleImage.slice(0, 50));
-        }
-        else if (block.data.fullBinary) {
+        } else if (block.data.fullBinary) {
           n.data = {
             ...n.data,
             result: block.data.preview,
@@ -227,12 +224,16 @@ export function computeGraphValues(nodes, edges) {
           n.data = { ...n.data, result: "", fullBinary: undefined };
         }
       }
-      
     }
   });
 
   // 🔄 Return every node with new data reference (forces React Flow update)
-  nodes = nodes.map(n => ({ ...n, data: { ...n.data } }));
+  const result = nodes.map((n) => ({ ...n, data: { ...n.data } }));
 
-  return nodes;
+  // 🧩 Return old reference if nothing changed → avoids re-render
+  if (JSON.stringify(result) === original) {
+    return nodes;
+  }
+
+  return result;
 }

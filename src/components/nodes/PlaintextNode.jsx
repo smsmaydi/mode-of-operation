@@ -8,7 +8,7 @@ export default function PlaintextNode({ id, data }) {
   const [bits, setBits] = useState("");
   const [file, setFile] = useState(null);
 
-
+ console.log("Render:", PlaintextNode);
  const onTextChange = (e) => {
   const value = e.target.value;
   setInputType("text");
@@ -42,7 +42,6 @@ const onBitsChange = (e) => {
 const onFileChange = (e) => {
   const file = e.target.files && e.target.files[0];
   if (file) {
-    console.log("PlaintextNode: File selected:", file);
     setInputType("image");
     setFile(file);          // ✅ state update
     setText("");

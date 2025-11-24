@@ -23,6 +23,7 @@ export default function NodePalette() {
       <Item label="Key"       type="key" />
       <Item label="BlockCipher" type="blockcipher" />
       <Item label="Ciphertext"  type="ciphertext" />
+      <Item label="IV"          type="iv" />
       <div style={{ fontSize: 12, color: '#666' }}>
         Drag & Drop to the canvas.
       </div>

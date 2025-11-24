@@ -4,7 +4,7 @@ import { xorImageFileWithKey } from "../../utils/xorImageFile";
 
 export default function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
-
+  console.log("Render:", BlockCipherNode);
   return (
     <div
       style={{
@@ -33,10 +33,10 @@ export default function BlockCipherNode({ id, data }) {
       </button>
 
       <strong>BlockCipher (XOR)</strong>
-      <Handle type="target" position={Position.Top}     id="plaintext"  style={{ background: "lightgreen" }} />
-      <Handle type="target" position={Position.Right}   id="key"        style={{ background: "lightblue" }} />
-      <Handle type="target" position={Position.Left}    id="prevCipher" style={{ background: "pink", top: "30%" }} />
-      <Handle type="target" position={Position.Left}    id="iv"         style={{ background: "#ff0", top: "70%" }} />
+      <Handle type="target" position={Position.Top}     id="plaintext"  style={{ background: "green", left: "70%" }} />
+      <Handle type="target" position={Position.Left}   id="key"        style={{ background: "blue", top: "30%" }} />
+      <Handle type="target" position={Position.Left}    id="prevCipher" style={{ background: "pink", top: "70%" }} />
+      <Handle type="target" position={Position.Top}     id="iv"         style={{ background: "red", left: "30%" }} />
       <Handle type="source" position={Position.Bottom}  id="out"        style={{ background: "#000" }} />
 
 
