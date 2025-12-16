@@ -1,52 +1,116 @@
-import React from "react";
-import { Handle, Position, useReactFlow } from "reactflow";
+import React, { useMemo } from "react";
+import { Handle, Position, useStore } from "reactflow";
+
+const selectNodes = (s) => s.getNodes();
+console.log("safasafasafasafasafasafasafasafasafasafasafasafasafa")
+const selectEdges = (s) => s.edges;
 
 export default function KeyNode({ id, data }) {
-  const instance = useReactFlow();
+  const nodes = useStore(selectNodes);
+  const edges = useStore(selectEdges);
 
-  const onChange = (e) => {
-    const cleaned = (e.target.value || "").replace(/[^01]/g, "");
-    data.onChange?.(id, { bits: cleaned });
-  };
+  const { cipherType, targetBlockId } = useMemo(() => {
+    const outgoing = edges.filter((e) => e.source === id);
 
-  console.log("Render:", KeyNode);
+    const toBlock = outgoing
+      .map((e) => {
+        const t = nodes.find((n) => n.id === e.target);
+        return { edge: e, target: t };
+      })
+      .filter((x) => x.target && x.target.type === "blockcipher");
+
+
+    if (toBlock.length === 0) return { cipherType: "xor", targetBlockId: null };
+
+    const chosen = toBlock[0].target;
+    return {
+      cipherType: chosen.data?.cipherType || "xor",
+      targetBlockId: chosen.id,
+    };
+  }, [edges, nodes, id]);
+
+  const showXor = cipherType === "xor";
+  const showAes = cipherType === "aes";
+  const showDes = cipherType === "des";
+
   return (
     <div
       style={{
         padding: 10,
-        border: "1px solid #666",
+        border: "1px solid #333",
         borderRadius: 6,
-        background: "lightblue",
-        position: "relative",
+        background: "LightBlue",
         minWidth: 200,
       }}
     >
-      <button
-        onClick={() => instance.deleteElements({ nodes: [{ id }] })}
-        style={{
-          position: "absolute",
-          top: 2,
-          right: 2,
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          color: "#b00",
-          fontWeight: "bold",
-        }}
-      >
-        ❌
-      </button>
-
       <strong>Key</strong>
-      <div style={{ marginTop: 6 }}>
-        <input
-          style={{ width: "100%", fontFamily: "monospace" }}
-          value={data.bits || ""}
-          onChange={onChange}
-          placeholder="for example 11001010"
-        />
-      </div>
-      <Handle type="source" position={Position.Right} id="out" />
+
+      <Handle type="source" position={Position.Right} id="out" style={{ background: "#000" }} />
+
+      {showXor && (
+        <div style={{ marginTop: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: "bold" }}>XOR bits:</label>
+          <input
+            value={data.bits || ""}
+            onChange={(e) => data.onChange?.(id, { bits: e.target.value })}
+            style={{
+              width: "100%",
+              padding: "3px 6px",
+              fontSize: 12,
+              borderRadius: 4,
+              border: "1px solid #999",
+              marginTop: 4,
+              marginRight: 4,
+              background: "white",
+            }}
+          />
+        </div>
+      )}
+
+      {showAes && (
+        <div style={{ marginTop: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: "bold" }}>AES key:</label>
+          <input
+            value={data.keyText || ""}
+            onChange={(e) => data.onChange?.(id, { keyText: e.target.value })}
+            placeholder="passphrase"
+            style={{
+              width: "100%",
+              padding: "3px 6px",
+              fontSize: 12,
+              borderRadius: 4,
+              border: "1px solid #999",
+              marginTop: 4,
+              background: "white",
+            }}
+          />
+        </div>
+      )}
+
+      {showDes && (
+        <div style={{ marginTop: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: "bold" }}>DES key (8 chars):</label>
+          <input
+            value={data.keyText || ""}
+            onChange={(e) => data.onChange?.(id, { keyText: e.target.value })}
+            placeholder="8 characters"
+            style={{
+              width: "100%",
+              padding: "3px 6px",
+              fontSize: 12,
+              borderRadius: 4,
+              border: "1px solid #999",
+              marginTop: 4,
+              background: "white",
+            }}
+          />
+          {(data.keyText || "").length !== 8 && (
+            <div style={{ fontSize: 11, color: "#900", marginTop: 4 }}>
+              Key length must be exactly 8 characters
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -12,7 +12,7 @@ export default function PlaintextNode({ id, data }) {
  const onTextChange = (e) => {
   const value = e.target.value;
   setInputType("text");
-  setText(value);           // ✅ state update
+  setText(value);           // state update
   setBits("");              // clean the rest
   setFile(null);
   
@@ -27,7 +27,7 @@ export default function PlaintextNode({ id, data }) {
 const onBitsChange = (e) => {
   const cleaned = (e.target.value || "").replace(/[^01]/g, ""); // only 0 and 1
   setInputType("bits");
-  setBits(cleaned);         // ✅ state update
+  setBits(cleaned);         // state update
   setText("");
   setFile(null);
 
@@ -43,7 +43,7 @@ const onFileChange = (e) => {
   const file = e.target.files && e.target.files[0];
   if (file) {
     setInputType("image");
-    setFile(file);          // ✅ state update
+    setFile(file);          // state update
     setText("");
     setBits("");
 

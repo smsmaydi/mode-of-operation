@@ -8,6 +8,10 @@ import ReactFlow, {
   MiniMap,
 } from "reactflow";
 
+
+import { encryptFileAES } from "./utils/aesFile";
+import { encryptFileDES } from "./utils/desFile";
+
 import "reactflow/dist/style.css";
 import { xorImageFileWithKey } from "./utils/imageXor";
 
@@ -38,6 +42,8 @@ export default function App() {
   const initial = useMemo(() => buildPreset(mode), [mode]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+
+  console.log("safa", nodes.map(n => ({ id: n.id, data: n.data, cipherType: n.data?.cipherType })));
 
   // Run XOR for image 
   const onRunXor = useCallback(
@@ -88,6 +94,52 @@ export default function App() {
     },
     [setNodes, edges]
   );
+
+  const onRunCipher = useCallback(
+    async (blockId) => {
+      const block = nodes.find((n) => n.id === blockId);
+      if (!block) return;
+
+      const cipherType = block.data?.cipherType || "xor";
+      const isImageMode = !!block.data?.plaintextFile;
+
+      if (cipherType === "xor") {
+        onRunXor(blockId);
+        return;
+      }
+
+      if (isImageMode) {
+        const file = block.data.plaintextFile;
+        const keyText = block.data.keyText || "";
+
+        try {
+          let url = "";
+          if (cipherType === "aes") {
+            if (!keyText) throw new Error("Missing AES key");
+            url = await encryptFileAES(file, keyText);
+          } else if (cipherType === "des") {
+            url = await encryptFileDES(file, keyText);
+          }
+
+          setNodes((inner) =>
+            computeGraphValues(
+              inner.map((n) =>
+                n.id === blockId ? { ...n, data: { ...n.data, preview: url } } : n
+              ),
+              edges
+            )
+          );
+        } catch (e) {
+          alert(String(e?.message || e));
+        }
+
+        return;
+      }
+
+          alert("AES/DES text mode not wired yet");
+      },[nodes, onRunXor, setNodes, edges]
+    );
+
 
 
 
@@ -149,7 +201,16 @@ export default function App() {
           ...n,
           data: {
             ...n.data,
-            onRunXor,
+            cipherType: n.data?.cipherType || "xor",
+            onChange: (id, patch) => {
+              setNodes((nds) => {
+                const next = nds.map((nn) =>
+                  nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
+                );
+                return computeGraphValues(next, preset.edges);
+              });
+            },
+            onRunCipher,
           },
         };
       }

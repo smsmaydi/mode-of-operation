@@ -1,10 +1,15 @@
-import React from "react";
+import React, {useState} from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 
 export default function CiphertextNode({ id, data }) {
   const instance = useReactFlow();
 
   const result = data?.result || "";
+  const [buttonText, setButtonText] = useState("Copy Binary");
+
+  console.log("Result:", result);
+
+  // Image files starts with blob: or data:image
   const isImage =
     typeof result === "string" &&
     (result.startsWith("blob:") || result.startsWith("data:image"));
@@ -18,7 +23,10 @@ export default function CiphertextNode({ id, data }) {
   const handleCopy = () => {
     if (data?.fullBinary) {
       navigator.clipboard.writeText(data.fullBinary);
-      alert("Binary copied to clipboard!");
+      setButtonText("Copied!");
+      setTimeout(() => {
+      setButtonText("Copy Binary");
+    }, 2000);
     }
   };
 
@@ -110,7 +118,7 @@ export default function CiphertextNode({ id, data }) {
             fontSize: 12,
           }}
         >
-          Copy Binary
+          {buttonText}
         </button>
       )}
     </div>

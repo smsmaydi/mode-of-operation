@@ -3,7 +3,7 @@ import { Handle, Position, useReactFlow } from 'reactflow';
 
 export default function IVNode({ id, data }) {
     const instance = useReactFlow();
-    const [inputType,setInputType] = React.useState('bits');
+    const [inputType, setInputType] = React.useState('bits');
     const [bits, setBits] = React.useState('');
 
     const onChange = (e) => {
