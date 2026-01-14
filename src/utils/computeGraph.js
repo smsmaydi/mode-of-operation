@@ -95,7 +95,6 @@ export function computeGraphValues(nodes, edges) {
 
       // Take image file and prepare for XOR
       if (pType === "image") {
-        // Eğer yeni dosya seçildiyse sıfırla
         if (pVal !== n.data.plaintextFile) {
           n.data = {
             ...n.data,
@@ -104,7 +103,6 @@ export function computeGraphValues(nodes, edges) {
             keyBits: kVal,
           };
         } else {
-          // Aynı dosya ama key değişmiş olabilir → keyBits'i her zaman güncelle
           n.data = {
             ...n.data,
             keyBits: kVal,
@@ -135,8 +133,22 @@ export function computeGraphValues(nodes, edges) {
       } else {
         const outBits = computed.value;
         const chunks = outBits.match(/.{1,8}/g) || [];
-        const binaryMultiLine = chunks.join("\n");
+        // const binaryMultiLine = chunks.join("\n");
         const ascii = binaryToText(outBits);
+        const binaryMultiLine = chunks
+          .map((byte, i) => {
+            // ascii'nin i. karakteri (yoksa boş)
+            const ch = ascii[i] ?? "";
+
+            // görünmeyen karakterleri noktaya çevir (istersen kaldırabilirsin)
+            const printable =
+              ch && ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) <= 126 ? ch : ".";
+
+            return `${byte}  ${printable}`;
+          })
+          .join("\n");
+
+        /* Output Text in Ciphernode*/ 
         const previewTxt = `out: ${ascii}\nbin:\n${binaryMultiLine}`;
 
         // Update node data
@@ -199,7 +211,7 @@ export function computeGraphValues(nodes, edges) {
       if (!block || !block.data) {
         n.data = { ...n.data, result: "", fullBinary: undefined };
       } else {
-        // 📸 IMAGE CHECK – look for both preview and result
+        // IMAGE CHECK – look for both preview and result
         const possibleImage =
           block.data.preview || block.data.result || n.data.result;
         const isImage =
@@ -226,6 +238,23 @@ export function computeGraphValues(nodes, edges) {
       }
     }
   });
+  function bitsWithAscii(bits) {
+    const lines = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      const byte = bits.slice(i, i + 8);
+      if (byte.length < 8) continue;
+
+      const charCode = parseInt(byte, 2);
+      const char =
+        charCode >= 32 && charCode <= 126
+          ? String.fromCharCode(charCode)
+          : "."; // printable değilse nokta
+
+      lines.push(`${byte}  ${char}`);
+    }
+    return lines.join("\n");
+  }
+
 
   // 🔄 Return every node with new data reference (forces React Flow update)
   const result = nodes.map((n) => ({ ...n, data: { ...n.data } }));

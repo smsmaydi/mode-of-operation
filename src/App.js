@@ -27,6 +27,7 @@ import IVNode from "./components/nodes/IVNode";
 import { computeGraphValues } from "./utils/computeGraph";
 import { buildPreset } from "./utils/presets";
 import { makeIsValidConnection } from "./utils/validators";
+import { ecbFirstNTrace } from "./utils/ecbTrace";
 
 const nodeTypes = {
   plaintext: PlaintextNode,
@@ -42,8 +43,15 @@ export default function App() {
   const initial = useMemo(() => buildPreset(mode), [mode]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
+  const [showFirst8, setShowFirst8] = useState(false);
+  const [first8Trace, setFirst8Trace] = useState([]);
 
-  console.log("safa", nodes.map(n => ({ id: n.id, data: n.data, cipherType: n.data?.cipherType })));
+//  React.useEffect(() => {
+//   const bc = nodes.filter(n => n.type === "blockcipher")
+//                   .map(n => ({ id: n.id, cipherType: n.data?.cipherType, data: n.data }));
+//   console.log("BLOCKCIPHER state:", bc);
+// }, [nodes]);
+
 
   // Run XOR for image 
   const onRunXor = useCallback(
@@ -97,11 +105,17 @@ export default function App() {
 
   const onRunCipher = useCallback(
     async (blockId) => {
+      console.log("onRunCipher fired", blockId);
+
       const block = nodes.find((n) => n.id === blockId);
+      console.log("block found?", !!block, block?.data);
       if (!block) return;
 
       const cipherType = block.data?.cipherType || "xor";
       const isImageMode = !!block.data?.plaintextFile;
+
+      console.log("cipherType =", cipherType);
+      console.log("isImageMode =", isImageMode);
 
       if (cipherType === "xor") {
         onRunXor(blockId);
@@ -119,6 +133,7 @@ export default function App() {
             url = await encryptFileAES(file, keyText);
           } else if (cipherType === "des") {
             url = await encryptFileDES(file, keyText);
+            
           }
 
           setNodes((inner) =>
@@ -140,6 +155,19 @@ export default function App() {
       },[nodes, onRunXor, setNodes, edges]
     );
 
+
+    React.useEffect(() => {
+      if (!showFirst8) return;
+      if (mode !== "ecb") { setFirst8Trace([]); return; }
+
+      try {
+        const rows = ecbFirstNTrace(nodes, edges, 8);
+        setFirst8Trace(rows);
+      } catch (e) {
+        console.error(e);
+        setFirst8Trace([]);
+      }
+    }, [showFirst8, mode, nodes, edges]);
 
 
 
@@ -188,7 +216,7 @@ export default function App() {
                     ? { ...nn, data: { ...nn.data, ...patch } }
                     : nn
                 );
-                // 🔹 sadece graf güncellemesi
+                
                 return computeGraphValues(next, preset.edges);
               });
             },
@@ -275,7 +303,7 @@ export default function App() {
             return computeGraphValues(next, edges);
           });
         },
-        onRunXor, // yeni node’lara da Run XOR bağla
+        onRunXor,
       };
 
       const newNode = {
@@ -288,7 +316,8 @@ export default function App() {
             : { ...dataBase },
       };
 
-      setNodes((nds) => computeGraphValues(nds, edges));
+      setNodes((nds) => computeGraphValues([...nds, newNode], edges));
+
 
     },
     [mode, edges, setNodes, onRunXor]
@@ -329,7 +358,7 @@ export default function App() {
       }}
     >
       <ModeMenu current={mode} onSelect={applyMode} />
-
+      
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
@@ -349,6 +378,74 @@ export default function App() {
           <MiniMap />
           <Controls />
           <Background />
+          <button
+            style={{
+              position: "absolute",
+              top: 10,
+              left: 10,
+              background: "white",
+              padding: "6px 10px",
+              borderRadius: 6,
+              border: "1px solid #ddd",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+              cursor: "pointer",
+              zIndex: 10,
+              pointerEvents: "all"
+            }}
+            onClick={() => setShowFirst8((v) => !v)}
+          >
+            {showFirst8 ? "Hide first 8 blocks" : "Show first 8 blocks"}
+          </button>
+          {showFirst8 && (
+  <div
+    style={{
+      position: "absolute",
+      top: 50,
+      left: 10,
+      width: 360,
+      maxHeight: 260,
+      overflow: "auto",
+      background: "white",
+      border: "1px solid #ddd",
+      borderRadius: 8,
+      padding: 10,
+      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+      fontSize: 12,
+      lineHeight: 1.4,
+      zIndex: 10,
+      pointerEvents: "all" 
+    }}
+  >
+    <div style={{ fontWeight: 700, marginBottom: 8 }}>
+      First 8 blocks (preview)
+    </div>
+
+    {/* For now demo content: later i will display the real trace here */}
+    {first8Trace.length === 0 ? (
+      <div style={{ color: "#666" }}>
+        No trace yet. (Connect plaintext → blockcipher → ciphertext and set key)
+      </div>
+    ) : (
+      first8Trace.map((row) => (
+        <div key={row.i} style={{
+          display: "grid",
+          gridTemplateColumns: "60px 1fr",
+          gap: 8,
+          padding: "6px 0",
+          borderBottom: row.i === first8Trace.length - 1 ? "none" : "1px solid #eee",
+        }}>
+          <div style={{ fontWeight: 600 }}>Block {row.i + 1}</div>
+          <div style={{ fontFamily: "monospace" }}>
+            <div><b>m:</b> {row.mHex}</div>
+            <div><b>c:</b> {row.cHex}</div>
+          </div>
+        </div>
+      ))
+    )}
+
+  </div>
+)}
+
         </ReactFlow>
       </div>
 

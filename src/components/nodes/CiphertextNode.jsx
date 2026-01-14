@@ -7,7 +7,7 @@ export default function CiphertextNode({ id, data }) {
   const result = data?.result || "";
   const [buttonText, setButtonText] = useState("Copy Binary");
 
-  console.log("Result:", result);
+  
 
   // Image files starts with blob: or data:image
   const isImage =
@@ -18,7 +18,7 @@ export default function CiphertextNode({ id, data }) {
     result &&
     !isImage &&
     !result.includes("Ready for Run XOR") &&
-    !result.includes("Eksik giriş");
+    !result.includes("Missing input");
 
   const handleCopy = () => {
     if (data?.fullBinary) {
@@ -61,7 +61,7 @@ export default function CiphertextNode({ id, data }) {
       <Handle type="target" position={Position.Top} id="in" style={{ background: "violet" }} />
       <Handle type="source" position={Position.Bottom} id="out" />
 
-      {/* GÖRÜNÜM ALANI */}
+      {}
       <div style={{ marginTop: 8, marginRight: 8, textAlign: "center" }}>
         {isImage && (
           <>

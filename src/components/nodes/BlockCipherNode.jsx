@@ -4,9 +4,14 @@ import { xorImageFileWithKey } from "../../utils/xorImageFile";
 
 export default function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
-  console.log("Render:", BlockCipherNode);
 
   const [cipherType, setCipherType] = useState(data.cipherType || "xor");
+
+  // const handleCipherChange = (e) => {
+  //   const v = e.target.value;
+  //   console.log("BlockCipherNode select changed to:", v, "node id:", id);
+  //   data.onChange?.(id, { cipherType: v });
+  // };
 
 
   const effectiveCipherType = data.cipherType || "xor";
@@ -69,6 +74,7 @@ export default function BlockCipherNode({ id, data }) {
             const val = e.target.value;
             setCipherType(val);
             data.onChange?.(id, { cipherType: val });
+            // handleCipherChange(e);
           }
         }
         style={{

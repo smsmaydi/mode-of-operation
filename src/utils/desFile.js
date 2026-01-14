@@ -35,6 +35,7 @@ export async function desCbcEncryptBytes(bytes, keyStr) {
 }
 
 export async function encryptFileDES(file, keyStr) {
+  console.log("--------------------------------encryptFileDES called");
   const buf = await file.arrayBuffer();
   const outBytes = await desCbcEncryptBytes(new Uint8Array(buf), keyStr);
   const blob = new Blob([outBytes], { type: "application/octet-stream" });

@@ -8,7 +8,7 @@ export default function PlaintextNode({ id, data }) {
   const [bits, setBits] = useState("");
   const [file, setFile] = useState(null);
 
- console.log("Render:", PlaintextNode);
+
  const onTextChange = (e) => {
   const value = e.target.value;
   setInputType("text");

@@ -72,6 +72,7 @@ export async function aesGcmDecryptBytes(bytes, passphrase) {
     or previewing the encrypted file.
 */ 
 export async function encryptFileAES(file, passphrase) {
+  console.log("++++++++++++++++++++++++++++++++++encryptFileAES called");
   const buf = await file.arrayBuffer();
   const outBytes = await aesGcmEncryptBytes(new Uint8Array(buf), passphrase);
   const blob = new Blob([outBytes], { type: "application/octet-stream" });
