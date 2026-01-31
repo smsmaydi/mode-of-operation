@@ -1,3 +1,5 @@
+
+
 // src/utils/imageXor.js
 
 // bit string → Uint8Array (ör. "01010101" → [85])
@@ -16,47 +18,81 @@ export function bitStringToBytes(bits) {
   return out;
 }
 
+
+export function xorBytesWithKey(bytes, keyBits) {
+  const keyBytes = bitStringToBytes(keyBits);
+  if (keyBytes.length === 0) throw new Error("Key is not valid.");
+
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    out[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
+  }
+  return out;
+}
+
+export function xorRgbaBytesWithKey(rgbaBytes, keyBits) {
+  const keyBytes = bitStringToBytes(keyBits);
+  if (keyBytes.length === 0) throw new Error("Key is not valid.");
+
+  const out = new Uint8Array(rgbaBytes); // kopya
+  let ki = 0;
+
+  for (let i = 0; i < out.length; i += 4) {
+    const kb = keyBytes[ki];
+    out[i] ^= kb;       // R
+    out[i + 1] ^= kb;   // G
+    out[i + 2] ^= kb;   // B
+    // out[i + 3] alpha sabit
+    ki = (ki + 1) % keyBytes.length;
+  }
+  return out;
+}
+
+
+
 // File → XOR → dataURL 
 export function xorImageFileWithKey(file, keyBits) {
   return new Promise((resolve, reject) => {
+    if (!(file instanceof Blob)) {
+      reject(new TypeError("xorImageFileWithKey expects a File/Blob."));
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = img.width;
         canvas.height = img.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         ctx.drawImage(img, 0, 0);
+
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
         const data = imageData.data;
 
         const keyBytes = bitStringToBytes(keyBits);
         if (keyBytes.length === 0) {
-          reject('Key is not valid.');
+          reject("Key is not valid.");
           return;
         }
 
-
-        // data Array is in RGBA format (4 bytes per pixel) 
-        // First 3 bytes are color channels, 4th is alpha (transparency)
         let ki = 0;
         for (let i = 0; i < data.length; i += 4) {
-          data[i]     = data[i] ^ keyBytes[ki]; // R
-          data[i + 1] = data[i + 1] ^ keyBytes[ki]; // G
-          data[i + 2] = data[i + 2] ^ keyBytes[ki]; // B
-          // alpha (i+3) stays the same : data[i + 3]
+          const kb = keyBytes[ki];
+          data[i] ^= kb;
+          data[i + 1] ^= kb;
+          data[i + 2] ^= kb;
           ki = (ki + 1) % keyBytes.length;
         }
 
         ctx.putImageData(imageData, 0, 0);
-        const outUrl = canvas.toDataURL('image/png');
-        resolve(outUrl);
+        resolve(canvas.toDataURL("image/png"));
       };
-      img.onerror = reject;
+      img.onerror = () => reject("Image load failed");
       img.src = ev.target.result;
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject("File read failed");
     reader.readAsDataURL(file);
   });
 }

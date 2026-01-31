@@ -13,7 +13,9 @@ import { encryptFileAES } from "./utils/aesFile";
 import { encryptFileDES } from "./utils/desFile";
 
 import "reactflow/dist/style.css";
-import { xorImageFileWithKey } from "./utils/imageXor";
+import { xorImageFileWithKey, xorRgbaBytesWithKey } from "./utils/imageXor";
+import { rgbaBytesToPngDataUrl } from "./utils/bytesToDataUrl";
+
 
 import ModeMenu from "./components/layout/ModeMenu";
 import NodePalette from "./components/palette/NodePalette";
@@ -27,7 +29,7 @@ import IVNode from "./components/nodes/IVNode";
 import { computeGraphValues } from "./utils/computeGraph";
 import { buildPreset } from "./utils/presets";
 import { makeIsValidConnection } from "./utils/validators";
-import { ecbFirstNTrace } from "./utils/ecbTrace";
+import { ecbFirstNTrace, ecbFirstNTraceFromBytes } from "./utils/ecbTrace";
 
 const nodeTypes = {
   plaintext: PlaintextNode,
@@ -54,54 +56,40 @@ export default function App() {
 
 
   // Run XOR for image 
-  const onRunXor = useCallback(
-    (blockId) => {
-      setNodes((nds) => {
-        const block = nds.find((n) => n.id === blockId);
-        if (!block) return nds;
+  const onRunXor = useCallback((blockId) => {
+    setNodes((nds) => {
+      const block = nds.find((n) => n.id === blockId);
+      if (!block) return nds;
 
-        const isImageMode = !!block.data.plaintextFile;
+      const input = block.data.plaintextFile; // sende bu Uint8Array
+      const keyBits = block.data.keyBits;
 
-        // --- IMAGE MODE ---
-        if (isImageMode) {
-          const file = block.data.plaintextFile;
-          const keyBits = block.data.keyBits;
-
-          if (!file || !keyBits) {
-            alert("Missing image or key!");
-            return nds;
-          }
-
-          
-          // Run Xor everytime with current key
-          xorImageFileWithKey(file, keyBits)
-            .then((url) => {
-              setNodes((inner) =>
-                computeGraphValues(
-                  inner.map((n) =>
-                    n.id === blockId
-                      ? { ...n, data: { ...n.data, preview: url } }
-                      : n
-                  ),
-                  edges
-                )
-              );
-            })
-            .catch((err) => {
-              alert("Image XOR failed: " + err);
-            });
-        }
-
-        // --- TEXT / BITS MODE ---
-        else {
-          setNodes((inner) => computeGraphValues(inner, edges));
-        }
-
+      if (!input || !keyBits) {
+        alert("Missing image or key!");
         return nds;
+      }
+
+      // ciphertext node id'sini edge'den bul (blockcipher -> ciphertext)
+      const outEdge = edges.find((e) => e.source === blockId); // gerekirse sourceHandle da ekleyeceğiz
+      const ctId = outEdge?.target;
+
+      const outBytes = xorRgbaBytesWithKey(input, keyBits);
+      const outUrl = rgbaBytesToPngDataUrl(outBytes, 512, 512);
+
+      console.log("ctId:", ctId, "outEdge:", outEdge);
+
+      return nds.map((n) => {
+        if (n.id === blockId) {
+          return { ...n, data: { ...n.data, preview: outUrl, xorBytes: outBytes } };
+        }
+        if (ctId && n.id === ctId) {
+          return { ...n, data: { ...n.data, preview: outUrl } };
+        }
+        return n;
       });
-    },
-    [setNodes, edges]
-  );
+    });
+  }, [edges, setNodes]);
+
 
   const onRunCipher = useCallback(
     async (blockId) => {
@@ -156,18 +144,50 @@ export default function App() {
     );
 
 
-    React.useEffect(() => {
-      if (!showFirst8) return;
-      if (mode !== "ecb") { setFirst8Trace([]); return; }
+  React.useEffect(() => {
+  if (!showFirst8) return;
 
-      try {
-        const rows = ecbFirstNTrace(nodes, edges, 8);
+  (async () => {
+    try {
+      const pt = nodes.find((x) => x.type === "plaintext");
+      const keyN = nodes.find((x) => x.type === "key");
+      console.log("PLAINTEXT DATA:", pt.data);
+      console.log(pt.data.value);
+      if (!pt || !keyN) { setFirst8Trace([]); return; }
+
+      // If image/file mode: read real bytes from the file
+      if (pt.data?.inputType === "image" && pt.data?.value instanceof File) {
+        const buf = await pt.data.value.arrayBuffer();
+        console.log(buf);
+
+        const bytes = new Uint8Array(buf);
+        console.log(bytes);
+
+        // Key: senin KEY DATA'nda bits var -> text değil
+        const keyBits = keyN.data?.bits || "";
+        const clean = keyBits.replace(/\s+/g, "");
+        if (!/^[01]+$/.test(clean) || clean.length % 8 !== 0) { setFirst8Trace([]); return; }
+
+        const keyBytes = new Uint8Array(clean.length / 8);
+        for (let i = 0; i < keyBytes.length; i++) {
+          keyBytes[i] = parseInt(clean.slice(i * 8, i * 8 + 8), 2);
+        }
+
+        const rows = ecbFirstNTraceFromBytes(bytes, keyBytes, 8, 16);
         setFirst8Trace(rows);
-      } catch (e) {
-        console.error(e);
-        setFirst8Trace([]);
+        return;
       }
-    }, [showFirst8, mode, nodes, edges]);
+
+
+      // Otherwise use the normal text/bits trace
+      const rows = ecbFirstNTrace(nodes, edges, 8);
+      setFirst8Trace(rows);
+    } catch (e) {
+      console.error(e);
+      setFirst8Trace([]);
+    }
+  })();
+}, [showFirst8, nodes, edges]);
 
 
 

@@ -3,7 +3,7 @@ import { Handle, Position, useReactFlow } from "reactflow";
 
 export default function CiphertextNode({ id, data }) {
   const instance = useReactFlow();
-
+  const preview = data?.preview || "";
   const result = data?.result || "";
   const [buttonText, setButtonText] = useState("Copy Binary");
 
@@ -11,8 +11,8 @@ export default function CiphertextNode({ id, data }) {
 
   // Image files starts with blob: or data:image
   const isImage =
-    typeof result === "string" &&
-    (result.startsWith("blob:") || result.startsWith("data:image"));
+    typeof preview === "string" &&
+    (preview.startsWith("blob:") || preview.startsWith("data:image"));
 
   const showTextArea =
     result &&
@@ -66,17 +66,16 @@ export default function CiphertextNode({ id, data }) {
         {isImage && (
           <>
             <img
-              src={result}
+              src={preview}
               alt="cipher"
               style={{ maxWidth: "100%", borderRadius: 4 }}
             />
             <div style={{ marginTop: 6 }}>
-              <a href={result} download="cipher.png">
-                ⬇ Download
-              </a>
+              <a href={preview} download="cipher.png">⬇ Download</a>
             </div>
           </>
         )}
+
 
         {showTextArea && (
           <textarea
