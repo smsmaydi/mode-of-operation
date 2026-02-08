@@ -14,6 +14,7 @@ import { encryptFileDES, decryptFileDES } from "./utils/desFile";
 import { fileToPixelBytes } from "./components/crypto/imageToBytes";
 
 import "reactflow/dist/style.css";
+import "reactflow/dist/base.css";
 import { xorImageFileWithKey, xorRgbaBytesWithKey } from "./utils/imageXor";
 import { rgbaBytesToPngDataUrl } from "./utils/bytesToDataUrl";
 
@@ -28,6 +29,7 @@ import CiphertextNode from "./components/nodes/CiphertextNode";
 import IVNode from "./components/nodes/IVNode";
 import XorPreBlockNode from "./components/nodes/XorPreBlockNode";
 import CtrNode from "./components/nodes/CtrNode";
+import DecryptNode from "./components/nodes/DecryptNode";
 
 import { computeGraphValues } from "./utils/computeGraph";
 import { buildPreset } from "./utils/presets";
@@ -42,11 +44,13 @@ const nodeTypes = {
   iv: IVNode,
   xor: XorPreBlockNode,
   ctr: CtrNode,
+  decrypt: DecryptNode,
 };
 
 export default function App() {
   const [mode, setMode] = useState("ecb");
   const [showHandleLabels, setShowHandleLabels] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
 
   const initial = useMemo(() => buildPreset(mode), [mode]);
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
@@ -82,12 +86,16 @@ export default function App() {
 
     console.log("🎯 onRunXor - block.data:", block.data);
     console.log("   plaintextFile:", block.data.plaintextFile);
+    console.log("   encryptedImageFile:", block.data.encryptedImageFile);
+    console.log("   isDecryptMode:", block.data.isDecryptMode);
     console.log("   keyBits:", block.data.keyBits);
     console.log("   keyBits type:", typeof block.data.keyBits);
     console.log("   keyBits is string?", typeof block.data.keyBits === 'string');
     console.log("   mode:", currentMode);
 
-    const fileInput = block.data.plaintextFile; 
+    // Check if decrypt mode
+    const isDecrypt = block.data.isDecryptMode;
+    const fileInput = isDecrypt ? block.data.encryptedImageFile : block.data.plaintextFile;
     const keyBits = block.data.keyBits;
 
     if (!fileInput || !keyBits) {
@@ -251,8 +259,8 @@ export default function App() {
         if (!block) return currentNodes;
 
         const cipherType = block.data?.cipherType || "xor";
-        const isImageMode = !!block.data?.plaintextFile || !!block.data?.encryptedFile;
-        const isEncryptedInput = !!block.data?.encryptedFile;
+        const isImageMode = !!block.data?.plaintextFile || !!block.data?.encryptedImageFile;
+        const isEncryptedInput = !!block.data?.encryptedImageFile;
 
         console.log("cipherType =", cipherType);
         console.log("isImageMode =", isImageMode);
@@ -263,7 +271,7 @@ export default function App() {
         }
 
         if (isImageMode) {
-          const file = isEncryptedInput ? block.data.encryptedFile : block.data.plaintextFile;
+          const file = isEncryptedInput ? block.data.encryptedImageFile : block.data.plaintextFile;
           // For AES/DES, we need keyText, but we have keyBits from Key node
           // Use keyBits directly as passphrase for AES
           // For DES, convert first 64 bits to 8 characters
@@ -737,6 +745,8 @@ export default function App() {
         onSelect={applyMode}
         showHandleLabels={showHandleLabels}
         onToggleHandleLabels={setShowHandleLabels}
+        isDarkTheme={isDarkTheme}
+        onToggleDarkTheme={setIsDarkTheme}
       />
       
       <div
@@ -756,6 +766,7 @@ export default function App() {
           fitView
           fitViewOptions={{ padding: mode === "ecb" ? 0.4 : 0.1 }}
           defaultViewport={defaultViewport}
+          className={isDarkTheme ? 'dark' : ''}
         >
           <MiniMap />
           <Controls />
@@ -837,9 +848,11 @@ export default function App() {
         <aside
           style={{
             width: 220,
-            borderLeft: "1px solid #ddd",
-            background: "#fafafa",
+            borderLeft: `1px solid ${isDarkTheme ? '#333' : '#ddd'}`,
+            background: isDarkTheme ? '#1e1e1e' : '#fafafa',
+            color: isDarkTheme ? '#fff' : '#000',
             padding: 10,
+            transition: 'background-color 0.3s ease'
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Description</div>

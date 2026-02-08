@@ -1,12 +1,13 @@
-import React, {useState} from "react";
+import React, {useState, useRef, useLayoutEffect} from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 
-export default function CiphertextNode({ id, data }) {
+function CiphertextNode({ id, data }) {
   const instance = useReactFlow();
   const result = data?.result || "";
   const [buttonText, setButtonText] = useState("Copy Binary");
   const showLabels = !!data?.showHandleLabels;
+  const taRef = useRef(null);
 
   
 
@@ -30,6 +31,17 @@ export default function CiphertextNode({ id, data }) {
     }, 2000);
     }
   };
+
+  useLayoutEffect(() => {
+    if (!taRef.current || !showTextArea) return;
+    const timer = setTimeout(() => {
+      if (taRef.current) {
+        taRef.current.style.height = "auto";
+        taRef.current.style.height = `${taRef.current.scrollHeight}px`;
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [result, showTextArea]);
 
   return (
     <div
@@ -95,24 +107,80 @@ export default function CiphertextNode({ id, data }) {
 
 
         {showTextArea && (
-          <textarea
-            value={result}
-            readOnly
-            className="nodrag"
-            style={{
-              width: "100%",
-              height: 100,
-              background: "white",
-              border: "1px solid #aaa",
-              borderRadius: 6,
-              
-              marginRight: 0,
-              color: "#333",
-              fontFamily: "monospace",
-              resize: "none",
-              marginTop: 6,
-            }}
-          />
+          <div style={{ marginTop: 6 }}>
+            {data?.decryptedContent ? (
+              // Decrypt mode display
+              <>
+                <textarea
+                  value={`${data?.cipherType?.toUpperCase() || "AES"}\nENC: ${(data?.fullBinary || "").slice(0, 100)}...\nPlaintext: ${data.decryptedContent}`}
+                  readOnly
+                  className="nodrag"
+                  style={{
+                    width: "90%",
+                    minHeight: 60,
+                    maxHeight: 200,
+                    background: "white",
+                    border: "1px solid #aaa",
+                    borderRadius: 6,
+                    padding: "8px",
+                    marginRight: 0,
+                    color: "#333",
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    resize: "none",
+                    overflow: "auto",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-all",
+                    lineHeight: 1.5
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(data?.fullBinary || "");
+                    setButtonText("Copied ENC!");
+                    setTimeout(() => setButtonText("Copy ENC"), 2000);
+                  }}
+                  className="nodrag"
+                  style={{
+                    marginTop: 6,
+                    padding: "6px 12px",
+                    border: "1px solid #aaa",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    background: "white",
+                    fontSize: 11,
+                  }}
+                >
+                  {buttonText === "Copied ENC!" ? buttonText : "Copy ENC"}
+                </button>
+              </>
+            ) : (
+              // Encrypt mode display (original)
+              <textarea
+                ref={taRef}
+                value={result}
+                readOnly
+                className="nodrag"
+                style={{
+                  width: "90%",
+                  minHeight: 60,
+                  background: "white",
+                  border: "1px solid #aaa",
+                  borderRadius: 6,
+                  padding: "8px",
+                  marginRight: 0,
+                  color: "#333",
+                  fontFamily: "monospace",
+                  fontSize: 11,
+                  resize: "none",
+                  overflow: "hidden",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                  lineHeight: 1.5
+                }}
+              />
+            )}
+          </div>
         )}
 
         {!result && (
@@ -142,3 +210,5 @@ export default function CiphertextNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(CiphertextNode);

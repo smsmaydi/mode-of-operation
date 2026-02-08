@@ -162,6 +162,52 @@ export function makeIsValidConnection(mode) {
       params.targetHandle === "key"
     ) return true;
 
+    // --- Decrypt Node connections (Free mode or all modes) ---
+    // Ciphertext -> Decrypt.encrypted (free mode)
+    if (
+      mode === "free" &&
+      sourceNode?.type === "ciphertext" &&
+      targetNode?.type === "decrypt" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "encrypted"
+    ) return true;
+
+    // BlockCipher -> Decrypt.encrypted (free mode - encrypted output from cipher)
+    if (
+      mode === "free" &&
+      sourceNode?.type === "blockcipher" &&
+      targetNode?.type === "decrypt" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "encrypted"
+    ) return true;
+
+    // Key -> Decrypt.key (free mode)
+    if (
+      mode === "free" &&
+      sourceNode?.type === "key" &&
+      targetNode?.type === "decrypt" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "key"
+    ) return true;
+
+    // Decrypt -> Plaintext (free mode - output of decrypted data)
+    if (
+      mode === "free" &&
+      sourceNode?.type === "decrypt" &&
+      targetNode?.type === "plaintext" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "in"
+    ) return true;
+
+    // Decrypt -> Ciphertext (free mode - for chaining)
+    if (
+      mode === "free" &&
+      sourceNode?.type === "decrypt" &&
+      targetNode?.type === "ciphertext" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "in"
+    ) return true;
+
     // Free mode: allow any connection for testing
     if (mode === "free") {
       return true;

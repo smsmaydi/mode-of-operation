@@ -19,8 +19,9 @@ console.error = (function (orig) {
 const handler = (e) => {
   if (resizeObserverErr.test(e.message) || resizeObserverWarn.test(e.message)) {
     e.stopImmediatePropagation();
+    e.preventDefault();
     console.warn("⚠️ Suppressed ResizeObserver error:", e.message);
-    return;
+    return false;
   }
 };
 

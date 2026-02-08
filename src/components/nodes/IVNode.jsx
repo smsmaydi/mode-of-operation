@@ -2,7 +2,7 @@ import React from 'react';
 import { Handle, Position, useReactFlow } from 'reactflow';
 import { checkModeForDeleteButton } from '../../utils/nodeHelpers';
 
-export default function IVNode({ id, data }) {
+function IVNode({ id, data }) {
     const instance = useReactFlow();
     const showLabels = !!data?.showHandleLabels;
     const [inputType, setInputType] = React.useState('bits');
@@ -103,3 +103,5 @@ export default function IVNode({ id, data }) {
         </div>
     )
 }
+
+export default React.memo(IVNode);

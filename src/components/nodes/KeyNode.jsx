@@ -4,7 +4,7 @@ import { Handle, Position, useStore } from "reactflow";
 const selectNodes = (s) => s.getNodes();
 const selectEdges = (s) => s.edges;
 
-export default function KeyNode({ id, data }) {
+function KeyNode({ id, data }) {
   const nodes = useStore(selectNodes);
   const edges = useStore(selectEdges);
   const showLabels = !!data?.showHandleLabels;
@@ -94,8 +94,12 @@ export default function KeyNode({ id, data }) {
           <label style={{ fontSize: 12, fontWeight: "bold" }}>XOR bits:</label>
           <input
             value={data.bits || ""}
-            onChange={(e) => data.onChange?.(id, { bits: e.target.value })}
+            onChange={(e) => {
+              const filtered = e.target.value.replace(/[^01]/g, '');
+              data.onChange?.(id, { bits: filtered });
+            }}
             className="nodrag"
+            placeholder="Only 0 and 1"
             style={{
               width: "100%",
               padding: "3px 6px",
@@ -238,4 +242,6 @@ export default function KeyNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(KeyNode);
  

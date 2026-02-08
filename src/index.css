@@ -14,3 +14,53 @@ code {
 .react-flow {
   contain: strict;
 }
+
+/* Dark theme for React Flow */
+.react-flow.dark {
+  background-color: #1a1a1a !important;
+}
+
+.react-flow.dark .react-flow__node {
+  background-color: #2d2d2d;
+  border-color: #444;
+  color: #000000; /* Keep text black */
+}
+
+.react-flow.dark .react-flow__node * {
+  color: #000000 !important; /* Force all text to be black */
+}
+
+.react-flow.dark .react-flow__handle {
+  background-color: #555;
+}
+
+.react-flow.dark .react-flow__handle:hover {
+  background-color: #666;
+}
+
+.react-flow.dark .react-flow__edge-path {
+  stroke: #888;
+}
+
+.react-flow.dark .react-flow__minimap {
+  background-color: #1a1a1a;
+}
+
+.react-flow.dark .react-flow__controls {
+  background-color: #2d2d2d;
+  border-color: #444;
+}
+
+.react-flow.dark .react-flow__controls button {
+  background-color: #3d3d3d;
+  color: #fff;
+  border-color: #444;
+}
+
+.react-flow.dark .react-flow__controls button:hover {
+  background-color: #4d4d4d;
+}
+
+.react-flow.dark .react-flow__attribution {
+  color: #888;
+}

@@ -1,13 +1,21 @@
-import React , {useState } from "react";
+import React , {useState, useEffect } from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { xorImageFileWithKey } from "../../utils/xorImageFile";
 import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 
-export default function BlockCipherNode({ id, data }) {
+function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
   const showLabels = !!data?.showHandleLabels;
 
   const [cipherType, setCipherType] = useState(data.cipherType || "xor");
+
+  // Auto-trigger Run for encrypted image files
+  useEffect(() => {
+    if (data.inputType === "encryptedImage" && data.encryptedImageFile && data.keyBits) {
+      console.log("🔄 Auto-triggering Run for encrypted image file");
+      data.onRunCipher?.(id);
+    }
+  }, [data.encryptedImageFile, data.keyBits, data.inputType, data.onRunCipher, id]);
 
   // const handleCipherChange = (e) => {
   //   const v = e.target.value;
@@ -115,7 +123,6 @@ export default function BlockCipherNode({ id, data }) {
         <option value="aes">AES</option>
         <option value="des">DES</option>
       </select>
-      
 
       <div style={{ marginTop: 10 }}>
         <button className="nodrag" onClick={() => data.onRunCipher?.(id)} style={{ borderRadius: 5, border: "solid 1px #333", cursor: "pointer" }}>
@@ -125,3 +132,5 @@ export default function BlockCipherNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(BlockCipherNode);

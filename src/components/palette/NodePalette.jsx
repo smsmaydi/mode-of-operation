@@ -23,6 +23,7 @@ export default function NodePalette() {
       <Item label="Key"       type="key" />
       <Item label="BlockCipher" type="blockcipher" />
       <Item label="Ciphertext"  type="ciphertext" />
+      <Item label="Decrypt"     type="decrypt" />
       <Item label="IV"          type="iv" />
       <Item label="Nonce+Counter" type="ctr" />
       <div style={{ fontSize: 12, color: '#666' }}>
