@@ -1,6 +1,6 @@
 export async function fileToPixelBytes(
   file,
-  { width = 512, height = 512 } = {}
+  { width = 256, height = 256 } = {}
 ) {
   const url = URL.createObjectURL(file);
 
@@ -21,7 +21,7 @@ export async function fileToPixelBytes(
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.clearRect(0, 0, width, height);
 
-    // normalize et: her görsel 512×512 olur
+
     ctx.drawImage(img, 0, 0, width, height);
 
     const imageData = ctx.getImageData(0, 0, width, height);

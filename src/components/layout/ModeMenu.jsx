@@ -7,7 +7,7 @@ const modes = [
   { id: 'free', label: 'Free Mode' },
 ];
 
-export default function ModeMenu({ current, onSelect }) {
+export default function ModeMenu({ current, onSelect, showHandleLabels, onToggleHandleLabels }) {
   return (
     <aside style={{ width: 220, borderRight: '1px solid #ddd', background: '#fafafa' }}>
       <div style={{ padding: 12, fontWeight: 700 }}>Modes</div>
@@ -31,6 +31,16 @@ export default function ModeMenu({ current, onSelect }) {
       ))}
       <div style={{ padding: 12, fontSize: 12, color: '#666' }}>
         Click a mode.
+      </div>
+      <div style={{ padding: 12, borderTop: '1px solid #eee' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <input
+            type="checkbox"
+            checked={!!showHandleLabels}
+            onChange={(e) => onToggleHandleLabels?.(e.target.checked)}
+          />
+          Show input/output labels
+        </label>
       </div>
     </aside>
   );

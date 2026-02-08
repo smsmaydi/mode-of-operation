@@ -1,9 +1,11 @@
 import React , {useState } from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { xorImageFileWithKey } from "../../utils/xorImageFile";
+import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 
 export default function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
+  const showLabels = !!data?.showHandleLabels;
 
   const [cipherType, setCipherType] = useState(data.cipherType || "xor");
 
@@ -53,6 +55,7 @@ export default function BlockCipherNode({ id, data }) {
           cursor: "pointer",
           color: "#b00",
           fontWeight: "bold",
+          display: checkModeForDeleteButton(data?.mode),
         }}
       >
         ❌
@@ -61,14 +64,35 @@ export default function BlockCipherNode({ id, data }) {
       <strong>BlockCipher</strong>
       <Handle type="target" position={Position.Top}     id="plaintext"  style={{ background: "green", left: "70%" }} />
       <Handle type="target" position={Position.Left}   id="key"        style={{ background: "blue", top: "30%" }} />
-      <Handle type="target" position={Position.Left}    id="prevCipher" style={{ background: "pink", top: "70%" }} />
-      <Handle type="target" position={Position.Top}     id="iv"         style={{ background: "red", left: "30%" }} />
+      <Handle type="target" position={Position.Top} id="xor" style={{ background: "purple", left: "30%" }} />
+      <Handle type="target" position={Position.Top}   id="ctr"        style={{ background: "#5a4ecb" }} />
       <Handle type="source" position={Position.Bottom}  id="out"        style={{ background: "#000" }} />
+
+      {showLabels && (
+        <>
+          <div style={{ position: "absolute", top: -14, left: "62%", fontSize: 10, color: "#0a0" }}>
+            plaintext
+          </div>
+          <div style={{ position: "absolute", top: "24%", left: -36, fontSize: 10, color: "#06c" }}>
+            key
+          </div>
+          <div style={{ position: "absolute", top: -14, left: "18%", fontSize: 10, color: "#7a1fa2" }}>
+            xor
+          </div>
+          <div style={{ position: "absolute", top: -14, left: "42%", fontSize: 10, color: "#5a4ecb" }}>
+            ctr
+          </div>
+          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "#111" }}>
+            out
+          </div>
+        </>
+      )}
 
       <br/>
       <label style={{ fontSize: 12, fontWeight: "bold" }}>Algorithm:</label>
       <select
         value={cipherType}
+        className="nodrag"
         onChange={(e) => 
           {
             const val = e.target.value;
@@ -94,7 +118,7 @@ export default function BlockCipherNode({ id, data }) {
       
 
       <div style={{ marginTop: 10 }}>
-        <button onClick={() => data.onRunCipher?.(id)} style={{ borderRadius: 5, border: "solid 1px #333", cursor: "pointer" }}>
+        <button className="nodrag" onClick={() => data.onRunCipher?.(id)} style={{ borderRadius: 5, border: "solid 1px #333", cursor: "pointer" }}>
           Run
         </button>
       </div>      

@@ -1,9 +1,11 @@
 import React, { useState, useRef, useLayoutEffect } from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { fileToPixelBytes } from "../crypto/imageToBytes";
+import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 
 export default function PlaintextNode({ id, data }) {
   const instance = useReactFlow();
+  const showLabels = !!data?.showHandleLabels;
   const [inputType, setInputType] = useState("text");
   const [text, setText] = useState("");
   const [bits, setBits] = useState("");
@@ -56,15 +58,34 @@ export default function PlaintextNode({ id, data }) {
     setBits("");
 
     const pixelBytes = await fileToPixelBytes(file, {
-      width: 512,
-      height: 512,
+      width: 256,
+      height: 256,
     });
 
     data.onChange?.(id, {
       inputType: "image",
-      value: pixelBytes,
-      width: 512,
-      height: 512,
+      value: file,  // ← Store the actual File object, not pixelBytes!
+      width: 256,
+      height: 256,
+      pixelBytes,   // ← Store pixels separately if needed for preview
+    });
+  };
+
+  const onEncryptedFileChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    setInputType("encrypted");
+    setFile(file);
+    setText("");
+    setBits("");
+
+    data.onChange?.(id, {
+      inputType: "encrypted",
+      value: file,
+      width: undefined,
+      height: undefined,
+      pixelBytes: undefined,
     });
   };
 
@@ -99,6 +120,7 @@ export default function PlaintextNode({ id, data }) {
     >
       <button
         onClick={() => instance.deleteElements({ nodes: [{ id }] })}
+        id='delete-btn'
         style={{
           position: "absolute",
           top: 2,
@@ -108,6 +130,7 @@ export default function PlaintextNode({ id, data }) {
           cursor: "pointer",
           color: "#b00",
           fontWeight: "bold",
+          display: checkModeForDeleteButton(data?.mode),
         }}
       >
         ❌
@@ -120,6 +143,7 @@ export default function PlaintextNode({ id, data }) {
       placeholder="Text..." 
       value={inputType === "text" ? text : ""} 
       onChange={onTextChange} 
+      className="nodrag"
     />
   </div>
   <div style={{ marginTop: 6 }}>
@@ -127,19 +151,50 @@ export default function PlaintextNode({ id, data }) {
       placeholder="Bits..." 
       value={inputType === "bits" ? bits : ""} 
       onChange={onBitsChange} 
+      className="nodrag"
     />
   </div>
   <div style={{ marginTop: 6 }}>
+    <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
+      Image file (encrypt)
+    </div>
     <input 
       type="file" 
       accept="image/*" 
-      onChange={onFileChange} 
+      onChange={onFileChange}
+      className="nodrag" 
     />
+    <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
+      Use this for original images.
+    </div>
+  </div>
+  <div style={{ marginTop: 8 }}>
+    <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
+      Encrypted file (decrypt)
+    </div>
+    <input 
+      type="file" 
+      accept=".enc,.bin,application/octet-stream" 
+      onChange={onEncryptedFileChange}
+      className="nodrag" 
+    />
+    <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
+      Use the .enc/.bin you downloaded.
+    </div>
   </div>
 </div>
-
-
       <Handle type="source" position={Position.Bottom} id="out" />
+      <Handle type="source" position={Position.Right} id="outRight" style={{ top: "50%" }} />
+      {showLabels && (
+        <>
+          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "#111" }}>
+            out
+          </div>
+          <div style={{ position: "absolute", top: "46%", right: -24, fontSize: 10, color: "#111" }}>
+            out
+          </div>
+        </>
+      )}
     </div>
   );
 }

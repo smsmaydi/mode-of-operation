@@ -120,16 +120,35 @@ export function ecbFirstNTrace(nodes, _edges, n = 8, blockSize = 16) {
   return rows;
 }
 
-export function ecbFirstNTraceFromBytes(bytes, keyBytes, n = 8, blockSize = 16) {
+export function ecbFirstNTraceFromBytes(bytes, keyBytes, n = 8, blockSize = 16, mode = 'ecb', ivBytes = null) {
   if (!bytes?.length || !keyBytes?.length) return [];
 
   const rows = [];
+  let prevCiphertext = ivBytes || null; // For CBC: use IV or previous ciphertext
+
   for (let i = 0; i < n; i++) {
     const start = i * blockSize;
     const m = bytes.slice(start, start + blockSize);
     if (m.length === 0) break;
 
-    const c = xorWithRepeatingKey(m, keyBytes);
+    let c;
+    if (mode === 'cbc') {
+      // CBC: plaintext ⊕ (previousCiphertext or IV) ⊕ key
+      if (prevCiphertext) {
+        const withPrev = new Uint8Array(m.length);
+        for (let j = 0; j < m.length; j++) {
+          withPrev[j] = m[j] ^ prevCiphertext[j % prevCiphertext.length];
+        }
+        c = xorWithRepeatingKey(withPrev, keyBytes);
+      } else {
+        // First block without IV
+        c = xorWithRepeatingKey(m, keyBytes);
+      }
+      prevCiphertext = c; // Save for next iteration
+    } else {
+      // ECB: plaintext ⊕ key (each block independent)
+      c = xorWithRepeatingKey(m, keyBytes);
+    }
 
     rows.push({
       i,

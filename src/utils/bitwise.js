@@ -8,16 +8,17 @@ export function xorBits(a = '', b = '') {
     return { error: 'Empty input' };
   }
 
-  // 🔹 Repeat key to get the same length
+  // 🔹 Align key to plaintext length
   let A = a;
   let B = b;
+  
   if (a.length !== b.length) {
     if (b.length < a.length) {
-      // Repeat key
+      // Key is shorter: repeat key to match plaintext length
       B = b.repeat(Math.ceil(a.length / b.length)).slice(0, a.length);
     } else {
-      // If key is short, pad with zeros
-      A = a.padEnd(b.length, '0');
+      // Key is longer: use only needed key bits (don't pad plaintext)
+      B = b.slice(0, a.length);
     }
   }
 

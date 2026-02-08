@@ -24,6 +24,7 @@ export default function NodePalette() {
       <Item label="BlockCipher" type="blockcipher" />
       <Item label="Ciphertext"  type="ciphertext" />
       <Item label="IV"          type="iv" />
+      <Item label="Nonce+Counter" type="ctr" />
       <div style={{ fontSize: 12, color: '#666' }}>
         Drag & Drop to the canvas.
       </div>

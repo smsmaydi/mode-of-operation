@@ -1,4 +1,4 @@
-// base rules
+// Base validation rules for all modes
 function baseRules(params, nodes) {
   const src = nodes.find(n => n.id === params.source);
   const tgt = nodes.find(n => n.id === params.target);
@@ -25,15 +25,15 @@ function baseRules(params, nodes) {
   return false;
 }
 
-// Mode’a göre farklı kural seti döndürmek için factory
+// Factory function to return mode-specific validation rules
 export function makeIsValidConnection(mode) {
   return (params, nodes) => {
     const sourceNode = nodes.find((n) => n.id === params.source);
     const targetNode = nodes.find((n) => n.id === params.target);
 
-    // BlockCipher -> Ciphertext (ECB / Free)
+    // BlockCipher -> Ciphertext (ECB mode)
     if (
-      (mode === "ecb" || mode === "free") &&
+      mode === "ecb" &&
       sourceNode?.type === "blockcipher" &&
       targetNode?.type === "ciphertext" &&
       params.sourceHandle === "out" &&
@@ -42,9 +42,9 @@ export function makeIsValidConnection(mode) {
       return true;
     }
 
-    // Ciphertext -> BlockCipher.prevCipher (CBC chaining)
+    // Ciphertext -> BlockCipher.prevCipher (CBC chaining for subsequent blocks)
     if (
-      (mode === "cbc" || mode === "free") &&
+      mode === "cbc" &&
       sourceNode?.type === "ciphertext" &&
       targetNode?.type === "blockcipher" &&
       params.sourceHandle === "out" &&
@@ -53,26 +53,119 @@ export function makeIsValidConnection(mode) {
       return true;
     }
 
-    // Plaintext -> BlockCipher
+    // BlockCipher -> Ciphertext (CBC mode)
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "blockcipher" &&
+      targetNode?.type === "ciphertext" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "in"
+    ) {
+      return true;
+    }
+
+    // IV -> BlockCipher.prevCipher (CBC initialization - first block uses IV instead of previous ciphertext)
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "iv" &&
+      targetNode?.type === "blockcipher" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "prevCipher"
+    ) {
+      return true;
+    }
+
+    // --- XOR Node connections (CBC mode only) ---
+    // Plaintext -> XOR.pt
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "plaintext" &&
+      targetNode?.type === "xor" &&
+      params.sourceHandle === "out" &&
+      (params.targetHandle === "pt" || params.targetHandle === "ptLeft")
+    ) return true;
+
+    // IV -> XOR.pc
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "iv" &&
+      targetNode?.type === "xor" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "pc"
+    ) return true;
+
+    // Ciphertext -> XOR.pc (for chaining in CBC)
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "ciphertext" &&
+      targetNode?.type === "xor" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "pc"
+    ) return true;
+
+    // XOR -> BlockCipher.xor
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "xor" &&
+      targetNode?.type === "blockcipher" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "xor"
+    ) return true;
+
+    // CTR -> BlockCipher.ctr
+    if (
+      mode === "ctr" &&
+      sourceNode?.type === "ctr" &&
+      targetNode?.type === "blockcipher" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "ctr"
+    ) return true;
+
+    // Plaintext -> XOR.pt (CTR)
+    if (
+      mode === "ctr" &&
+      sourceNode?.type === "plaintext" &&
+      targetNode?.type === "xor" &&
+      (params.sourceHandle === "out" || params.sourceHandle === "outRight") &&
+      (params.targetHandle === "pt" || params.targetHandle === "ptLeft")
+    ) return true;
+
+    // BlockCipher -> XOR.pc (CTR keystream)
+    if (
+      mode === "ctr" &&
+      sourceNode?.type === "blockcipher" &&
+      targetNode?.type === "xor" &&
+      params.sourceHandle === "out" &&
+      (params.targetHandle === "pc" || params.targetHandle === "pcTop")
+    ) return true;
+
+    // XOR -> Ciphertext (CTR)
+    if (
+      mode === "ctr" &&
+      sourceNode?.type === "xor" &&
+      targetNode?.type === "ciphertext" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "in"
+    ) return true;
+
+    // Plaintext -> BlockCipher (all modes)
     if (
       sourceNode?.type === "plaintext" &&
       targetNode?.type === "blockcipher" &&
       params.targetHandle === "plaintext"
     ) return true;
 
-    // Key -> BlockCipher
+    // Key -> BlockCipher (all modes)
     if (
       sourceNode?.type === "key" &&
       targetNode?.type === "blockcipher" &&
       params.targetHandle === "key"
     ) return true;
 
-    // IV -> BlockCipher (map to prevCipher)
-    if (
-      sourceNode?.type === "iv" &&
-      targetNode?.type === "blockcipher" &&
-      params.targetHandle === "prevCipher"
-    ) return true;
+    // Free mode: allow any connection for testing
+    if (mode === "free") {
+      return true;
+    }
 
     return false;
   };

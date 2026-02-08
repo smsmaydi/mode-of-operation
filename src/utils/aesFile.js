@@ -1,4 +1,5 @@
 const te = new TextEncoder();
+const td = new TextDecoder();
 
 
 /* 
@@ -35,6 +36,40 @@ function concatUint8(a, b) {
   return out;
 }
 
+/*
+    buildPayloadWithMime(bytes, mime):
+    Prefixes the raw bytes with an ASCII header "MIME:<type>\n".
+*/
+function buildPayloadWithMime(bytes, mime) {
+  const safeMime = (mime || "application/octet-stream").toString();
+  const header = te.encode(`MIME:${safeMime}\n`);
+  return concatUint8(header, bytes);
+}
+
+/*
+    extractMimeAndBytes(bytes):
+    Reads optional "MIME:<type>\n" header and returns { mime, dataBytes }.
+*/
+function extractMimeAndBytes(bytes) {
+  const prefix = [77, 73, 77, 69, 58]; // "MIME:"
+  const hasPrefix = bytes.length >= 6 && prefix.every((v, i) => bytes[i] === v);
+  if (hasPrefix) {
+    const max = Math.min(bytes.length, 200);
+    let newlineIndex = -1;
+    for (let i = 5; i < max; i++) {
+      if (bytes[i] === 10) {
+        newlineIndex = i;
+        break;
+      }
+    }
+    if (newlineIndex !== -1) {
+      const mime = td.decode(bytes.slice(5, newlineIndex)) || "application/octet-stream";
+      return { mime, dataBytes: bytes.slice(newlineIndex + 1) };
+    }
+  }
+  return { mime: "application/octet-stream", dataBytes: bytes };
+}
+
 
 /*
     aesGcmEncryptBytes(bytes, passphrase): 
@@ -66,15 +101,57 @@ export async function aesGcmDecryptBytes(bytes, passphrase) {
 }
 
 /*
+    encryptedBytesToPngDataUrl(encryptedBytes):
+    Takes encrypted bytes and visualizes them as a 256×256 PNG image
+    by padding/repeating bytes as RGBA pixel data.
+*/
+function encryptedBytesToPngDataUrl(encryptedBytes) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const imageData = ctx.createImageData(256, 256);
+  
+  // Fill RGBA data: repeat encrypted bytes to fill 262,144 bytes (256*256*4)
+  for (let i = 0; i < imageData.data.length; i++) {
+    imageData.data[i] = encryptedBytes[i % encryptedBytes.length];
+  }
+  
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+/*
     encryptFileAES(file, passphrase): Reads a File/Blob into bytes, 
     encrypts it with aesGcmEncryptBytes, 
-    wraps the result in a blob, and returns an object URL for downloading 
-    or previewing the encrypted file.
+    visualizes the encrypted bytes as a 256×256 PNG image,
+    and returns a data URL for preview.
 */ 
 export async function encryptFileAES(file, passphrase) {
   console.log("++++++++++++++++++++++++++++++++++encryptFileAES called");
   const buf = await file.arrayBuffer();
-  const outBytes = await aesGcmEncryptBytes(new Uint8Array(buf), passphrase);
+  const payload = buildPayloadWithMime(new Uint8Array(buf), file?.type);
+  const outBytes = await aesGcmEncryptBytes(payload, passphrase);
+  const pngDataUrl = encryptedBytesToPngDataUrl(outBytes);
   const blob = new Blob([outBytes], { type: "application/octet-stream" });
-  return URL.createObjectURL(blob);
+  return {
+    previewUrl: pngDataUrl,
+    encryptedBytes: outBytes,
+    encryptedBlobUrl: URL.createObjectURL(blob),
+  };
+}
+
+/*
+    decryptFileAES(file, passphrase): Reads encrypted bytes,
+    decrypts with AES-GCM, restores original bytes and mime,
+    and returns an object URL for preview.
+*/
+export async function decryptFileAES(file, passphrase) {
+  console.log("++++++++++++++++++++++++++++++++++decryptFileAES called");
+  const buf = await file.arrayBuffer();
+  const outBytes = await aesGcmDecryptBytes(new Uint8Array(buf), passphrase);
+  const { mime, dataBytes } = extractMimeAndBytes(outBytes);
+  const blob = new Blob([dataBytes], { type: mime });
+  return { url: URL.createObjectURL(blob), mime, bytes: dataBytes };
 }

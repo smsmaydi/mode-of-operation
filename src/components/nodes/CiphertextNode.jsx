@@ -1,18 +1,19 @@
 import React, {useState} from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
+import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 
 export default function CiphertextNode({ id, data }) {
   const instance = useReactFlow();
-  const preview = data?.preview || "";
   const result = data?.result || "";
   const [buttonText, setButtonText] = useState("Copy Binary");
+  const showLabels = !!data?.showHandleLabels;
 
   
 
   // Image files starts with blob: or data:image
   const isImage =
-    typeof preview === "string" &&
-    (preview.startsWith("blob:") || preview.startsWith("data:image"));
+    typeof result === "string" &&
+    (result.startsWith("blob:") || result.startsWith("data:image"));
 
   const showTextArea =
     result &&
@@ -52,6 +53,7 @@ export default function CiphertextNode({ id, data }) {
           cursor: "pointer",
           color: "#b00",
           fontWeight: "bold",
+          display: checkModeForDeleteButton(data?.mode),
         }}
       >
         ❌
@@ -60,19 +62,34 @@ export default function CiphertextNode({ id, data }) {
       <strong>Ciphertext</strong>
       <Handle type="target" position={Position.Top} id="in" style={{ background: "violet" }} />
       <Handle type="source" position={Position.Bottom} id="out" />
+      {showLabels && (
+        <>
+          <div style={{ position: "absolute", top: -14, left: "46%", fontSize: 10, color: "#7a1fa2" }}>
+            in
+          </div>
+          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "#111" }}>
+            out
+          </div>
+        </>
+      )}
 
       {}
-      <div style={{ marginTop: 8, marginRight: 8, textAlign: "center" }}>
+      <div style={{ marginTop: 8, marginRight: 8, textAlign: "center",width:'100%', height: '100%', aspectRatio:'1 / 1' }}>
         {isImage && (
           <>
             <img
-              src={preview}
+              src={result}
               alt="cipher"
-              style={{ maxWidth: "100%", borderRadius: 4 }}
+              style={{ width: "100%", height: "100%", objectFit:"contain", borderRadius: 4, display: 'block' }}
             />
             <div style={{ marginTop: 6 }}>
-              <a href={preview} download="cipher.png">⬇ Download</a>
+              <a href={result} download="cipher.png">Download</a>
             </div>
+            {data?.encryptedBlobUrl && (
+              <div style={{ marginTop: 6 }}>
+                <a href={data.encryptedBlobUrl} download="cipher.enc">Download Encrypted</a>
+              </div>
+            )}
           </>
         )}
 
@@ -81,6 +98,7 @@ export default function CiphertextNode({ id, data }) {
           <textarea
             value={result}
             readOnly
+            className="nodrag"
             style={{
               width: "100%",
               height: 100,
@@ -116,6 +134,7 @@ export default function CiphertextNode({ id, data }) {
             padding: "2px 6px",
             fontSize: 12,
           }}
+          className="nodrag"
         >
           {buttonText}
         </button>
