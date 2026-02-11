@@ -1,6 +1,25 @@
 import { xorBits } from "./bitwise";
 import CryptoJS from "crypto-js";
 
+// Binary string to Hex helper
+function bitsToHex(bits) {
+  let hex = "";
+  for (let i = 0; i < bits.length; i += 4) {
+    const nibble = bits.substr(i, 4);
+    hex += parseInt(nibble, 2).toString(16);
+  }
+  return hex;
+}
+
+function hexToBits(hex) {
+  let bits = "";
+  for (let i = 0; i < hex.length; i += 2) {
+    const byte = parseInt(hex.substr(i, 2), 16).toString(2).padStart(8, "0");
+    bits += byte;
+  }
+  return bits;
+}
+
 // String → Binary (8 bit ASCII)
 function textToBinary(str) {
   return Array.from(str)
@@ -29,9 +48,31 @@ function encryptBitsWithAES(bits, keyPassphrase) {
     const plaintext = binaryToText(bits);
     if (!plaintext) return null;
     
-    // Encrypt with CryptoJS AES
-    const encrypted = CryptoJS.AES.encrypt(plaintext, keyPassphrase).toString();
-    return encrypted;
+    // Check if key is in HEX format (only 0-9, a-f, A-F characters and even length)
+    const isHexKey = /^[0-9a-fA-F]+$/.test(keyPassphrase) && keyPassphrase.length % 2 === 0;
+    const isBinaryKey = /^[01]+$/.test(keyPassphrase) && keyPassphrase.length % 8 === 0;
+    
+    // Convert binary key to hex if needed
+    let keyForAes = keyPassphrase;
+    if (isBinaryKey) {
+      keyForAes = bitsToHex(keyPassphrase);
+    }
+    
+    // Parse key accordingly
+    const key = isHexKey || isBinaryKey
+      ? CryptoJS.enc.Hex.parse(keyForAes)
+      : CryptoJS.enc.Utf8.parse(keyForAes);
+    
+    // Encrypt with CryptoJS AES in ECB mode (deterministic - same input = same output)
+    const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+      mode: CryptoJS.mode.ECB,
+      padding: CryptoJS.pad.Pkcs7
+    });
+    
+    // Return as hex string (like the site example)
+    const encryptedHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex).toUpperCase();
+    
+    return encryptedHex;
   } catch (e) {
     console.error("AES encryption error:", e);
     return null;
@@ -43,20 +84,37 @@ function encryptBitsWithAES(bits, keyPassphrase) {
 function encryptBitsWithDES(bits, keyString) {
   try {
     if (!bits || !keyString) return null;
-    if (keyString.length !== 8) return null;
     
     // Convert bits to text (8 bits = 1 char)
     const plaintext = binaryToText(bits);
     if (!plaintext) return null;
     
+    // Convert binary key to UTF-8 string if needed (8 bytes = 64 bits)
+    let keyForDes = keyString;
+    if (/^[01]+$/.test(keyString) && keyString.length === 64) {
+      // Convert 64 bits to 8 characters
+      keyForDes = "";
+      for (let i = 0; i < 8; i++) {
+        const byte = keyString.slice(i * 8, i * 8 + 8);
+        keyForDes += String.fromCharCode(parseInt(byte, 2));
+      }
+      console.log("  DES: Key converted from binary (64 bits) to 8-character string");
+    }
+    
+    if (keyForDes.length !== 8) {
+      console.log("  ❌ DES requires exactly 8-character key, got:", keyForDes.length);
+      return null;
+    }
+    
     // For DES simulation with CryptoJS TripleDES (since DES not available)
     // We'll use TripleDES with key repeated
-    const key = CryptoJS.enc.Utf8.parse(keyString);
+    const key = CryptoJS.enc.Utf8.parse(keyForDes);
     const encrypted = CryptoJS.TripleDES.encrypt(plaintext, key, {
       mode: CryptoJS.mode.ECB,
       padding: CryptoJS.pad.Pkcs7
-    }).toString();
-    return encrypted;
+    });
+    const encryptedHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex).toUpperCase();
+    return encryptedHex;
   } catch (e) {
     console.error("DES encryption error:", e);
     return null;
@@ -68,9 +126,46 @@ function decryptBitsWithAES(encryptedData, keyPassphrase) {
   try {
     if (!encryptedData || !keyPassphrase) return null;
     
-    // Decrypt with CryptoJS AES
-    const decrypted = CryptoJS.AES.decrypt(encryptedData, keyPassphrase);
+    console.log("🔓 AES-ECB Decryption:");
+    console.log("  Encrypted:", encryptedData.slice(0, 50) + "...");
+    console.log("  Key:", keyPassphrase);
+    
+    // Check if key is in HEX format
+    const isHexKey = /^[0-9a-fA-F]+$/.test(keyPassphrase) && keyPassphrase.length % 2 === 0;
+    const isBinaryKey = /^[01]+$/.test(keyPassphrase) && keyPassphrase.length % 8 === 0;
+    
+    // Convert binary key to hex if needed
+    let keyForAes = keyPassphrase;
+    if (isBinaryKey) {
+      keyForAes = bitsToHex(keyPassphrase);
+      console.log("  Key converted from binary to HEX:", keyForAes);
+    }
+    
+    // Parse key accordingly
+    const key = isHexKey || isBinaryKey
+      ? CryptoJS.enc.Hex.parse(keyForAes)
+      : CryptoJS.enc.Utf8.parse(keyForAes);
+    
+    console.log("  Key format:", isBinaryKey ? "BINARY→HEX" : isHexKey ? "HEX" : "UTF-8");
+    
+    // Check if encrypted data is in HEX format (no Base64 characters like +, /, =)
+    const isHexEncrypted = /^[0-9a-fA-F]+$/.test(encryptedData);
+    
+    // Create ciphertext object from hex or base64
+    const cipherParams = isHexEncrypted
+      ? CryptoJS.lib.CipherParams.create({
+          ciphertext: CryptoJS.enc.Hex.parse(encryptedData)
+        })
+      : encryptedData; // CryptoJS can handle base64 string directly
+    
+    // Decrypt with CryptoJS AES in ECB mode
+    const decrypted = CryptoJS.AES.decrypt(cipherParams, key, {
+      mode: CryptoJS.mode.ECB,
+      padding: CryptoJS.pad.Pkcs7
+    });
     const plaintextStr = decrypted.toString(CryptoJS.enc.Utf8);
+    
+    console.log("  Decrypted plaintext:", plaintextStr);
     
     if (!plaintextStr) return null;
     
@@ -86,10 +181,34 @@ function decryptBitsWithAES(encryptedData, keyPassphrase) {
 function decryptBitsWithDES(encryptedData, keyString) {
   try {
     if (!encryptedData || !keyString) return null;
-    if (keyString.length !== 8) return null;
     
-    const key = CryptoJS.enc.Utf8.parse(keyString);
-    const decrypted = CryptoJS.TripleDES.decrypt(encryptedData, key, {
+    // Convert binary key to UTF-8 string if needed (8 bytes = 64 bits)
+    let keyForDes = keyString;
+    if (/^[01]+$/.test(keyString) && keyString.length === 64) {
+      // Convert 64 bits to 8 characters
+      keyForDes = "";
+      for (let i = 0; i < 8; i++) {
+        const byte = keyString.slice(i * 8, i * 8 + 8);
+        keyForDes += String.fromCharCode(parseInt(byte, 2));
+      }
+      console.log("  DES: Key converted from binary (64 bits) to 8-character string");
+    }
+    
+    if (keyForDes.length !== 8) {
+      console.log("  ❌ DES requires exactly 8-character key, got:", keyForDes.length);
+      return null;
+    }
+    
+    const key = CryptoJS.enc.Utf8.parse(keyForDes);
+
+    const isHexEncrypted = /^[0-9a-fA-F]+$/.test(encryptedData);
+    const cipherParams = isHexEncrypted
+      ? CryptoJS.lib.CipherParams.create({
+          ciphertext: CryptoJS.enc.Hex.parse(encryptedData)
+        })
+      : encryptedData;
+
+    const decrypted = CryptoJS.TripleDES.decrypt(cipherParams, key, {
       mode: CryptoJS.mode.ECB,
       padding: CryptoJS.pad.Pkcs7
     });
@@ -109,11 +228,13 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
   // Prevent unnecessary processing
   if (!nodes || !edges) return nodes;
 
-  // Store original state for comparison
-  const original = JSON.stringify(nodes);
+  console.log('🔄 computeGraphValues called with mode:', mode, 'nodes:', nodes.length);
 
   const valueMap = new Map();
   const incoming = (id) => edges.filter((e) => e.target === id);
+
+  console.log('📊 computeGraph: Processing', nodes.length, 'nodes');
+  nodes.forEach((n) => console.log('  - Node:', n.id, 'type:', n.type));
 
   // --- Plaintext & Key nodes ---
   nodes.forEach((n) => {
@@ -124,36 +245,27 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
         normVal =
           n.data.value && n.data.value.trim() !== "" ? n.data.value : null;
       } else if (n.data.inputType === "text") {
-        normVal =
-          n.data.value && n.data.value.trim() !== ""
+        const textVal = n.data.value && n.data.value.trim() !== ""
             ? textToBinary(n.data.value)
             : null;
+        normVal = textVal;
       } else if (n.data.inputType === "image") {
         normVal = n.data.value || null; // File object
-        console.log("📁 Plaintext: Image mode detected, value:", normVal?.name || "no file");
       } else if (n.data.inputType === "encrypted") {
         normVal = n.data.value || null; // Encrypted text string
-        console.log("🔒 Plaintext: Encrypted text detected");
       } else if (n.data.inputType === "encryptedFile") {
         normVal = n.data.value || null; // Encrypted File object
-        console.log("🔒 Plaintext: Encrypted file detected, value:", normVal?.name || "no file");
       }
 
       if (!normVal) normVal = null;
       // Here we store both type and value for later use
-      // Also store isDecryptMode flag for routing later
+      // Also store isDecryptMode flag and fileTimestamp for routing later
       valueMap.set(n.id, { 
         type: n.data.inputType, 
         value: normVal, 
         isDecryptMode: n.data.isDecryptMode,
         decryptKey: n.data.decryptKey,
-      });
-      console.log("✅ Plaintext valueMap set:", {
-        id: n.id,
-        type: n.data.inputType,
-        isDecryptMode: n.data.isDecryptMode,
-        decryptKey: n.data.decryptKey ? n.data.decryptKey.slice(0, 10) + "..." : "none",
-        hasValue: !!normVal,
+        fileTimestamp: n.data.fileTimestamp, // Track file changes
       });
     }
 
@@ -193,24 +305,55 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
   });
 
   // --- XOR nodes (pre-block XOR for CBC) ---
-  nodes.forEach((n) => {
-    if (n.type === "xor") {
+  // In CTR mode, skip XOR processing here (will be done after BlockCipher)
+  if (mode !== "ctr") {
+    nodes.forEach((n) => {
+      if (n.type === "xor") {
       console.log("🔧 XOR node processing:", n.id);
       
       const inc = incoming(n.id);
-      const ptEdge = inc.find((e) => e.targetHandle === "pt");  // plaintext
-      const pcEdge = inc.find((e) => e.targetHandle === "pc");  // prevCipher/IV
+      const ptEdge = inc.find((e) => e.targetHandle === "pt" || e.targetHandle === "ptLeft");  // plaintext
+      const pcEdge = inc.find((e) => e.targetHandle === "pc" || e.targetHandle === "pcTop");  // prevCipher/IV
       
       const ptData = ptEdge ? valueMap.get(ptEdge.source) : null;
       const ptVal = ptData?.value;
       const ptType = ptData?.type;
       const pcVal = pcEdge ? valueMap.get(pcEdge.source)?.value : null;
+      const ptIsDecryptMode = ptData?.isDecryptMode;
+      const ptDecryptKey = ptData?.decryptKey;
       
-      // If plaintext is an image or encrypted file, skip XOR computation here
-      if (ptType === "image" || ptType === "encrypted") {
-        console.log("  📁 Image/encrypted detected - skipping XOR node computation");
-        n.data = { ...n.data, preview: "File mode - click Run on BlockCipher" };
-        valueMap.set(n.id, { type: ptType, value: ptVal });
+      // If plaintext is encrypted file (decrypt mode), skip XOR computation here
+      if ((ptType === "encrypted" || ptType === "encryptedFile") && ptIsDecryptMode) {
+        console.log("  📁 Encrypted file/content detected (decrypt mode) - skipping XOR node computation");
+        n.data = { 
+          ...n.data, 
+          preview: "Decrypt mode - use BlockCipher",
+          isDecryptMode: ptIsDecryptMode,
+        };
+        valueMap.set(n.id, { 
+          type: ptType, 
+          value: ptVal,
+          isDecryptMode: ptIsDecryptMode,
+          decryptKey: ptDecryptKey,
+        });
+        return;
+      }
+
+      // If plaintext is an image (encrypt mode), store for later image XOR processing
+      if (ptType === "image" && !ptIsDecryptMode) {
+        console.log("  🖼️ Image encrypt mode - storing image and keystream for XOR processing");
+        n.data = { 
+          ...n.data, 
+          preview: pcVal ? "Ready for image XOR" : "Waiting for keystream...",
+          plaintextFile: ptVal,
+          keystreamBits: pcVal || null,
+          imageMode: true,
+        };
+        valueMap.set(n.id, { 
+          type: "image",
+          value: ptVal,
+          keystreamBits: pcVal,
+        });
         return;
       }
       
@@ -232,11 +375,22 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           n.data = { ...n.data, error: xorResult.error };
         }
       } else {
-        n.data = { ...n.data, preview: "Missing inputs", ptInput: null, pcInput: null, xorOutput: null };
-        console.log("  ❌ XOR node missing inputs");
+        // Show partial inputs even if not both available
+        const preview = ptVal 
+          ? `PT: ${ptVal.slice(0, 16)}...${pcVal ? ' + ' + pcVal.slice(0, 16) + '...' : ' (waiting for keystream)'}`
+          : (pcVal ? `PC: ${pcVal.slice(0, 16)}...(waiting for plaintext)` : "Waiting for inputs...");
+        n.data = { 
+          ...n.data, 
+          preview, 
+          ptInput: ptVal || null, 
+          pcInput: pcVal || null, 
+          xorOutput: null 
+        };
+        console.log("  ⏳ XOR node waiting for inputs:", { ptVal: !!ptVal, pcVal: !!pcVal });
       }
     }
-  });
+    });
+  }
 
   // --- BlockCipher nodes ---
 
@@ -251,20 +405,12 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
   // prevVal = previous ciphertext value (bits)
   nodes.forEach((n) => {
     if (n.type === "blockcipher") {
-      console.log("🔧 BlockCipher node processing:", n.id);
-      
       const inc = incoming(n.id);
       const pEdge = mode === "ctr"
         ? inc.find((e) => e.targetHandle === "ctr")
         : inc.find((e) => e.targetHandle === "plaintext" || e.targetHandle === "xor");
       const kEdge = inc.find((e) => e.targetHandle === "key");
       const prevEdge = inc.find((e) => e.targetHandle === "prevCipher");
-
-      console.log("  📥 Incoming edges:", {
-        plaintext: !!pEdge,
-        key: !!kEdge,
-        prevCipher: !!prevEdge,
-      });
 
       const pVal = pEdge ? valueMap.get(pEdge.source)?.value : null;
       const pType = pEdge ? valueMap.get(pEdge.source)?.type : null;
@@ -277,31 +423,41 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       
       // Choose key based on cipher type
       let kVal = null;
+      let kValBitsForCtr = null;
       if (pIsDecryptMode && pDecryptKey) {
         // Decrypt mode: use key from PlaintextNode
         kVal = pDecryptKey;
       } else if (keyMapEntry) {
         // Encrypt mode: use key from Key node
-        if (cipherType === "aes" || cipherType === "des") {
-          kVal = keyMapEntry.keyText || keyMapEntry.value;
+        if (cipherType === "aes") {
+          // AES: use keyText (passphrase), not bits
+          kVal = keyMapEntry.keyText || keyMapEntry.bits || keyMapEntry.value;
+        } else if (cipherType === "des") {
+          // DES: use keyText (8 chars), not bits
+          kVal = keyMapEntry.keyText || keyMapEntry.bits || keyMapEntry.value;
         } else {
+          // XOR: use bits
           kVal = keyMapEntry.bits || keyMapEntry.value;
+        }
+
+        if (mode === "ctr") {
+          const rawKey = keyMapEntry.bits || keyMapEntry.keyText || keyMapEntry.value;
+          if (rawKey) {
+            if (/^[01]+$/.test(rawKey)) {
+              kValBitsForCtr = rawKey;
+            } else if (/^[0-9a-fA-F]+$/.test(rawKey) && rawKey.length % 2 === 0) {
+              kValBitsForCtr = hexToBits(rawKey);
+            } else {
+              kValBitsForCtr = textToBinary(rawKey);
+            }
+          }
         }
       }
       
       const prevVal = prevEdge ? valueMap.get(prevEdge.source)?.value : null;
 
-      console.log("  🔍 Values from valueMap:", {
-        pType,
-        pValExists: !!pVal,
-        kValExists: !!kVal,
-        prevValExists: !!prevVal,
-        isDecryptMode: pIsDecryptMode,
-      });
-
       // If any of the required inputs is missing, clear output and return
       if (!pVal || !kVal) {
-        console.log("  ❌ Missing required inputs! Clearing output.");
         n.data = {
           ...n.data,
           error: undefined,
@@ -322,19 +478,53 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           return;
         }
 
-        const computedCtr = xorBits(nonceCounter, kVal);
-        if (computedCtr.error) {
-          n.data = { ...n.data, error: computedCtr.error, preview: undefined };
-        } else {
-          const outBits = computedCtr.value;
-          n.data = {
-            ...n.data,
-            error: undefined,
-            preview: `keystream: ${outBits.slice(0, 32)}...`,
-            fullBinary: outBits,
-          };
-          valueMap.set(n.id, { type: "bits", value: outBits });
+        if (!kValBitsForCtr) {
+          n.data = { ...n.data, error: "Missing/invalid CTR key", preview: undefined };
+          return;
         }
+
+        let keystreamBits = null;
+        if (cipherType === "aes") {
+          const encryptedHex = encryptBitsWithAES(nonceCounter, kVal);
+          if (!encryptedHex) {
+            n.data = { ...n.data, error: "AES-CTR keystream failed", preview: undefined };
+            return;
+          }
+          keystreamBits = hexToBits(encryptedHex);
+        } else if (cipherType === "des") {
+          const encryptedHex = encryptBitsWithDES(nonceCounter, kVal);
+          if (!encryptedHex) {
+            n.data = { ...n.data, error: "DES-CTR keystream failed", preview: undefined };
+            return;
+          }
+          keystreamBits = hexToBits(encryptedHex);
+        } else {
+          // XOR CTR (legacy)
+          let keyRepeated = kValBitsForCtr;
+          if (nonceCounter.length > kValBitsForCtr.length) {
+            keyRepeated = kValBitsForCtr.repeat(Math.ceil(nonceCounter.length / kValBitsForCtr.length))
+                              .slice(0, nonceCounter.length);
+          }
+          const computedCtr = xorBits(nonceCounter, keyRepeated);
+          if (computedCtr.error) {
+            n.data = { ...n.data, error: computedCtr.error, preview: undefined };
+            return;
+          }
+          keystreamBits = computedCtr.value;
+        }
+
+        if (!keystreamBits) {
+          n.data = { ...n.data, error: "CTR keystream missing", preview: undefined };
+          return;
+        }
+
+        n.data = {
+          ...n.data,
+          error: undefined,
+          preview: `${cipherType.toUpperCase()}-CTR keystream: ${keystreamBits.slice(0, 32)}...`,
+          fullBinary: keystreamBits,
+        };
+        valueMap.set(n.id, { type: "bits", value: keystreamBits });
         return;
       }
 
@@ -344,16 +534,28 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
         console.log("    pVal type:", typeof pVal);
         console.log("    pVal is File?", pVal instanceof File);
         console.log("    pVal filename:", pVal?.name);
+        const existingPreview = n.data?.preview;
+        const hasImagePreview =
+          typeof existingPreview === "string" &&
+          (existingPreview.startsWith("data:image") || existingPreview.startsWith("blob:"));
         
-        if (pVal !== n.data.plaintextFile) {
-          console.log("    ✅ Setting plaintextFile and keyBits");
+        // Get fileTimestamp from plaintext node
+        const pTimestamp = pEdge ? valueMap.get(pEdge.source)?.fileTimestamp : null;
+        
+        // Update if file changed (different reference or timestamp) or key changed
+        if (pVal !== n.data.plaintextFile || 
+            kVal !== n.data.lastKey ||
+            pTimestamp !== n.data.lastFileTimestamp) {
+          console.log("    ✅ Setting plaintextFile and keyBits (file/key changed)");
           n.data = {
             ...n.data,
-            preview: "Ready for Run XOR",
+            preview: hasImagePreview ? existingPreview : "Ready for Run XOR",
             plaintextFile: pVal,
             encryptedFile: undefined,
             keyBits: kVal,
             inputType: "image",
+            lastKey: kVal,
+            lastFileTimestamp: pTimestamp,
           };
         } else {
           console.log("    ℹ️ plaintextFile already set, just updating keyBits");
@@ -378,18 +580,29 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       if (pType === "encryptedFile" && pIsDecryptMode && pVal instanceof File) {
         console.log("  🔒 ENCRYPTED FILE (IMAGE) DECRYPT MODE!");
         console.log("    Encrypted file:", pVal.name);
+        const existingPreview = n.data?.preview;
+        const hasImagePreview =
+          typeof existingPreview === "string" &&
+          (existingPreview.startsWith("data:image") || existingPreview.startsWith("blob:"));
         
-        if (pVal !== n.data.encryptedImageFile || kVal !== n.data.lastKey) {
+        // Get fileTimestamp from plaintext node
+        const pTimestamp = pEdge ? valueMap.get(pEdge.source)?.fileTimestamp : null;
+        
+        // Update if file changed (different timestamp) or key changed
+        if (pVal !== n.data.encryptedImageFile || 
+            kVal !== n.data.lastKey || 
+            pTimestamp !== n.data.lastFileTimestamp) {
           console.log("    ✅ Setting encryptedImageFile for decryption");
           n.data = {
             ...n.data,
-            preview: "Ready to decrypt image",
+            preview: hasImagePreview ? existingPreview : "Ready to decrypt image",
             encryptedImageFile: pVal,
             plaintextFile: undefined,
             keyBits: kVal,
             inputType: "encryptedImage",
             isDecryptMode: true,
             lastKey: kVal,
+            lastFileTimestamp: pTimestamp,
           };
         }
 
@@ -465,6 +678,16 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
         n.data?.lastCipherType === cipherType &&
         n.data?.fullBinary;
       
+      console.log("  🔍 Cache check:", {
+        lastPlaintext: n.data?.lastPlaintext?.slice(0, 16) + "...",
+        currentPlaintext: pVal?.slice(0, 16) + "...",
+        lastKey: n.data?.lastKey?.slice(0, 16) + "...",
+        currentKey: kVal?.slice(0, 16) + "...",
+        lastCipherType: n.data?.lastCipherType,
+        currentCipherType: cipherType,
+        inputsUnchanged,
+      });
+      
       if (inputsUnchanged) {
         console.log("  ℹ️ Inputs unchanged, preserving encrypted result");
         return;
@@ -472,7 +695,6 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       
       if (cipherType === "xor") {
         // XOR encryption
-        // 
         // ALGORITHM NOTES:
         // Current Implementation: Simple 1:1 XOR between plaintext and key
         //   - Plaintext: N bits
@@ -553,6 +775,7 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
 
           outgoingEdges.forEach((e) => {
             const tIdx = nodes.findIndex((nd) => nd.id === e.target);
+            console.log("  ✅ Ciphertext UPDATE: found at index", tIdx, "target id:", e.target, "updating with result:", previewTxt?.slice(0, 30));
             if (tIdx !== -1) {
               nodes[tIdx] = {
                 ...nodes[tIdx],
@@ -566,16 +789,18 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           });
         }
       } else if (cipherType === "aes") {
-        // AES encryption per byte
+        console.log("🔐 AES case executing with pVal:", pVal?.slice(0, 20), "kVal:", kVal?.slice(0, 16));
         const encrypted = encryptBitsWithAES(pVal, kVal);
+        
+        console.log("🔐 Encrypted result:", encrypted ? encrypted.slice(0, 30) : "NULL");
         
         if (!encrypted) {
           previewTxt = `AES\nKey: ${kVal?.slice(0, 16) || "waiting..."}...\n❌ Encryption error`;
           n.data = { ...n.data, error: "AES encryption failed", preview: previewTxt };
         } else {
-          // Show encrypted result in base64
+          // Show encrypted result in hex
           const plaintextDisplay = binaryToText(pVal) || "?";
-          previewTxt = `AES\nPlain: "${plaintextDisplay}"\nEnc: ${encrypted}\nKey: ${kVal?.slice(0, 16) || "?"}...`;
+          previewTxt = `AES\nPlain: "${plaintextDisplay}"\nEnc: ${encrypted}`;
           
           n.data = {
             ...n.data,
@@ -583,6 +808,7 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
             preview: previewTxt,
             encryptedDisplay: encrypted,
             fullBinary: encrypted,
+            cipherType,
             lastPlaintext: pVal,
             lastKey: kVal,
             lastCipherType: cipherType,
@@ -597,9 +823,16 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
               e.targetHandle === "in"
           );
 
+          console.log("🔗 AES: BlockCipher (id:", n.id, ") outgoing edges:", outgoingEdges.length);
+          if (outgoingEdges.length === 0) {
+            console.log("⚠️ AES: NO EDGES FOUND!");
+          }
+
           outgoingEdges.forEach((e) => {
             const tIdx = nodes.findIndex((nd) => nd.id === e.target);
+            console.log("✅ AES: Found node:", e.target, "at index:", tIdx, "will update with:", previewTxt?.slice(0, 30));
             if (tIdx !== -1) {
+              console.log("✅ AES: UPDATING Ciphertext", nodes[tIdx].id);
               nodes[tIdx] = {
                 ...nodes[tIdx],
                 data: {
@@ -608,6 +841,8 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
                   fullBinary: encrypted,
                 },
               };
+            } else {
+              console.log("❌ AES: Target node not found!");
             }
           });
         }
@@ -620,9 +855,9 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           previewTxt = `DES\nKey: ${kVal?.slice(0, 8) || "waiting..."}...\n${keyStatus}`;
           n.data = { ...n.data, error: keyStatus, preview: previewTxt };
         } else {
-          // Show encrypted result in base64
+          // Show encrypted result
           const plaintextDisplay = binaryToText(pVal) || "?";
-          previewTxt = `DES\nPlain: "${plaintextDisplay}"\nEnc: ${encrypted}\nKey: ${kVal?.slice(0, 8) || "?"}...`;
+          previewTxt = `DES\nPlain: "${plaintextDisplay}"\nEnc: ${encrypted}`;
           
           n.data = {
             ...n.data,
@@ -630,6 +865,7 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
             preview: previewTxt,
             encryptedDisplay: encrypted,
             fullBinary: encrypted,
+            cipherType,
             lastPlaintext: pVal,
             lastKey: kVal,
             lastCipherType: cipherType,
@@ -787,6 +1023,82 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
     }
   });
 
+  // --- XOR nodes for CTR mode (after BlockCipher) ---
+  if (mode === "ctr") {
+    nodes.forEach((n) => {
+      if (n.type === "xor") {
+        console.log("🔧 XOR node processing (CTR mode - after BlockCipher):", n.id);
+        
+        const inc = incoming(n.id);
+        const ptEdge = inc.find((e) => e.targetHandle === "pt" || e.targetHandle === "ptLeft");  // plaintext
+        const pcEdge = inc.find((e) => e.targetHandle === "pc" || e.targetHandle === "pcTop");  // prevCipher/keystream
+        
+        const ptData = ptEdge ? valueMap.get(ptEdge.source) : null;
+        const ptVal = ptData?.value;
+        const ptType = ptData?.type;
+        const pcVal = pcEdge ? valueMap.get(pcEdge.source)?.value : null;
+        const ptIsDecryptMode = ptData?.isDecryptMode;
+        const ptDecryptKey = ptData?.decryptKey;
+        
+        // If plaintext is an image or encrypted file, skip XOR computation here
+        if (ptType === "image" || ptType === "encrypted" || ptType === "encryptedFile") {
+          console.log("  📁 Image/encrypted detected - skipping XOR node computation");
+          n.data = { 
+            ...n.data, 
+            preview: "File mode - click Run on BlockCipher",
+            isDecryptMode: ptIsDecryptMode,
+          };
+          valueMap.set(n.id, { 
+            type: ptType, 
+            value: ptVal,
+            isDecryptMode: ptIsDecryptMode,
+            decryptKey: ptDecryptKey,
+          });
+          return;
+        }
+        
+        // For bits/text: compute XOR
+        if (ptVal && pcVal) {
+          const pcSource = pcEdge ? nodes.find((nd) => nd.id === pcEdge.source) : null;
+          const ctrCipher = pcSource?.data?.cipherType || "xor";
+          // XOR the two inputs
+          const xorResult = xorBits(ptVal, pcVal);
+          if (!xorResult.error) {
+            const ctrHex = (ctrCipher === "aes" || ctrCipher === "des")
+              ? bitsToHex(xorResult.value).toUpperCase()
+              : null;
+            valueMap.set(n.id, { type: "bits", value: xorResult.value });
+            n.data = { 
+              ...n.data, 
+              preview: `${ctrCipher.toUpperCase()}-CTR: ${(ctrHex || xorResult.value).slice(0, 16)}...`,
+              previewFull: `${ctrCipher.toUpperCase()}-CTR\n${ctrHex || xorResult.value}`,
+              ptInput: ptVal,
+              pcInput: pcVal,
+              xorOutput: xorResult.value,
+              xorOutputHex: ctrHex || undefined
+            };
+            console.log("  ✅ XOR computed:", xorResult.value.slice(0, 16));
+          } else {
+            n.data = { ...n.data, error: xorResult.error };
+          }
+        } else {
+          // Show partial inputs even if not both available
+          const preview = ptVal 
+            ? `PT: ${ptVal.slice(0, 16)}...${pcVal ? ' + ' + pcVal.slice(0, 16) + '...' : ' (waiting for keystream)'}`
+            : (pcVal ? `PC: ${pcVal.slice(0, 16)}...(waiting for plaintext)` : "Waiting for inputs...");
+          n.data = { 
+            ...n.data, 
+            preview, 
+            ptInput: ptVal || null, 
+            pcInput: pcVal || null, 
+            xorOutput: null 
+          };
+          console.log("  ⏳ XOR node waiting for inputs:", { ptVal: !!ptVal, pcVal: !!pcVal });
+        }
+      }
+    });
+  }
+
   // --- Ciphertext nodes ---
   nodes.forEach((n) => {
     if (n.type === "ciphertext") {
@@ -822,20 +1134,25 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       if (mode === "ctr" && xorNode?.data?.xorOutput) {
         n.data = {
           ...n.data,
-          result: xorNode.data.xorOutput,
-          fullBinary: xorNode.data.xorOutput,
+          result: xorNode.data.previewFull || xorNode.data.xorOutput,
+          fullBinary: xorNode.data.xorOutputHex || xorNode.data.xorOutput,
         };
         valueMap.set(n.id, { type: "bits", value: xorNode.data.xorOutput });
       } else if (!block || !block.data) {
         n.data = { ...n.data, result: "", fullBinary: undefined };
       } else {
         // IMAGE CHECK – look for both preview and result
-        const possibleImage =
-          block.data.preview || block.data.result || n.data.result;
-        const isImage =
-          typeof possibleImage === "string" &&
-          (possibleImage.startsWith("data:image") ||
-            possibleImage.startsWith("blob:"));
+        const candidateImages = [
+          n.data.result,
+          block.data.preview,
+          block.data.result,
+        ];
+        const possibleImage = candidateImages.find(
+          (value) =>
+            typeof value === "string" &&
+            (value.startsWith("data:image") || value.startsWith("blob:"))
+        );
+        const isImage = !!possibleImage;
 
         if (isImage) {
           n.data = { ...n.data, result: possibleImage };
@@ -852,6 +1169,14 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
             type: "bits",
             value: block.data.fullBinary,
           });
+        } else if (block.data.preview) {
+          n.data = {
+            ...n.data,
+            result: block.data.preview,
+            fullBinary: block.data.fullBinary,
+            decryptedContent: block.data.decryptedContent,
+            cipherType: block.data.cipherType,
+          };
         } else {
           n.data = { ...n.data, result: "", fullBinary: undefined };
         }
@@ -878,11 +1203,6 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
 
   // 🔄 Return every node with new data reference (forces React Flow update)
   const result = nodes.map((n) => ({ ...n, data: { ...n.data } }));
-
-  // 🧩 Return old reference if nothing changed → avoids re-render
-  if (JSON.stringify(result) === original) {
-    return nodes;
-  }
 
   return result;
 }

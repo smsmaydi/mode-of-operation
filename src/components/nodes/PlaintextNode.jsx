@@ -1,4 +1,4 @@
-import React, { useState, useRef, useLayoutEffect, useCallback } from "react";
+import React, { useState, useRef, useLayoutEffect, useCallback, useEffect } from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { fileToPixelBytes } from "../crypto/imageToBytes";
 import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
@@ -6,19 +6,33 @@ import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 function PlaintextNode({ id, data }) {
   const instance = useReactFlow();
   const showLabels = !!data?.showHandleLabels;
-  const [inputType, setInputType] = useState("text");
-  const [text, setText] = useState("");
-  const [bits, setBits] = useState("");
+  const [inputType, setInputType] = useState(data?.inputType || "text");
+  const [text, setText] = useState(data?.inputType === "text" ? (data?.value || "") : "");
+  const [bits, setBits] = useState(data?.inputType === "bits" ? (data?.value || "") : "");
   const [file, setFile] = useState(null);
   const [isDecryptMode, setIsDecryptMode] = useState(false);
   const [encryptedText, setEncryptedText] = useState("");
-  const [decryptKey, setDecryptKey] = useState("");
   const taRef = useRef(null);
+
+  // Sync state when preset data changes (e.g., when mode changes)
+  useEffect(() => {
+    if (data?.inputType !== inputType) {
+      setInputType(data?.inputType || "text");
+      if (data?.inputType === "text") {
+        setText(data?.value || "");
+        setBits("");
+      } else if (data?.inputType === "bits") {
+        setBits(data?.value || "");
+        setText("");
+      }
+    }
+  }, [data?.inputType, data?.value]);
 
 
 
   const onTextChange = (e) => {
       const rawValue = e.target.value;
+      console.log('📝 PlaintextNode.onTextChange called with:', rawValue);
 
       setInputType("text");
 
@@ -28,6 +42,7 @@ function PlaintextNode({ id, data }) {
       setBits("");
       setFile(null);
 
+      console.log('📝 Calling onChange with formatted value:', formatted);
       data.onChange?.(id, {
         inputType: "text",
         value: formatted,
@@ -71,6 +86,7 @@ function PlaintextNode({ id, data }) {
       width: 256,
       height: 256,
       pixelBytes,   // ← Store pixels separately if needed for preview
+      fileTimestamp: Date.now(), // Force BlockCipherNode to recognize file change
     });
   };
 
@@ -78,29 +94,37 @@ function PlaintextNode({ id, data }) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
+    console.log("📁 Encrypted file selected:", file.name);
+
     setInputType("encryptedFile");
     setFile(file);
     setText("");
     setBits("");
 
-    // Store File object directly for image decryption
-    data.onChange?.(id, {
+    const updateData = {
       inputType: "encryptedFile",
       value: file,
+      encryptedImageFile: file, // Use this property so App.js can find it
       isDecryptMode: true,
       fileName: file.name,
+      fileTimestamp: Date.now(), // Force BlockCipherNode to recognize file change
+      cipherType: "aes", // .enc files are AES encrypted, set cipher type automatically
+    };
+    
+    console.log("📤 PlaintextNode.onChange() called with:", {
+      inputType: updateData.inputType,
+      encryptedImageFile: !!updateData.encryptedImageFile,
+      cipherType: updateData.cipherType,
+      fileName: updateData.fileName,
     });
+
+    // Store File object with proper property names for App.js
+    data.onChange?.(id, updateData);
   };
 
   useLayoutEffect(() => {
-    if (!taRef.current) return;
-    const timer = setTimeout(() => {
-      if (taRef.current) {
-        taRef.current.style.height = "auto";
-        taRef.current.style.height = `${taRef.current.scrollHeight}px`;
-      }
-    }, 0);
-    return () => clearTimeout(timer);
+    // Disabled auto-resize to prevent ResizeObserver loop
+    // Textareas now have fixed height
   }, [text, inputType]);
 
 
@@ -144,25 +168,96 @@ function PlaintextNode({ id, data }) {
         ❌
       </button>
 
-      <strong>Plaintext</strong>
+      <strong>Plaintext {isDecryptMode ? "🔓 DECRYPT" : "🔐 ENCRYPT"}</strong>
       
       {/* Encrypt/Decrypt Toggle */}
       <div style={{ marginTop: 8, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-        <label style={{ display: "flex", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
+        <label style={{ display: "flex", alignItems: "center", cursor: "pointer", userSelect: "none", fontSize: 12, fontWeight: "bold" }}>
           <input
             type="checkbox"
             checked={isDecryptMode}
             onChange={(e) => {
-              setIsDecryptMode(e.target.checked);
-              if (!e.target.checked) {
+              const newDecryptMode = e.target.checked;
+              setIsDecryptMode(newDecryptMode);
+              
+              if (!newDecryptMode) {
+                // Switching to encrypt mode - clear decrypt-related state
                 setInputType("text");
                 setFile(null);
-                setDecryptKey("");
+                setEncryptedText("");
+                
+                // Clear all downstream nodes (BlockCipher and Ciphertext)
+                const allNodes = instance.getNodes();
+                const allEdges = instance.getEdges();
+                
+                // Find connected BlockCipher nodes
+                const connectedBlocks = allEdges
+                  .filter(e => e.source === id)
+                  .map(e => allNodes.find(n => n.id === e.target))
+                  .filter(n => n && n.type === "blockcipher");
+                
+                // Find connected Ciphertext nodes (through BlockCipher)
+                const connectedCiphertexts = connectedBlocks.flatMap(block => 
+                  allEdges
+                    .filter(e => e.source === block.id)
+                    .map(e => allNodes.find(n => n.id === e.target))
+                    .filter(n => n && n.type === "ciphertext")
+                );
+                
+                // Update nodes to clear decrypt-related data
+                const updatedNodes = allNodes.map(n => {
+                  if (n.id === id) {
+                    return {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        isDecryptMode: false,
+                        inputType: "text",
+                        value: "",
+                      }
+                    };
+                  }
+                  if (connectedBlocks.some(b => b.id === n.id)) {
+                    return {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        decryptedContent: undefined,
+                        preview: "",
+                        fullBinary: undefined,
+                        lastPlaintext: undefined,
+                        lastKey: undefined,
+                      }
+                    };
+                  }
+                  if (connectedCiphertexts.some(c => c.id === n.id)) {
+                    return {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        decryptedContent: undefined,
+                        result: "",
+                        fullBinary: undefined,
+                      }
+                    };
+                  }
+                  return n;
+                });
+                
+                instance.setNodes(updatedNodes);
+              } else {
+                // Switching to decrypt mode
+                setInputType("encrypted");
+                setText("");
+                setBits("");
+                setFile(null);
               }
+              
               // Update parent when toggle changes
               data.onChange?.(id, {
-                isDecryptMode: e.target.checked,
-                decryptKey: e.target.checked ? decryptKey : "",
+                isDecryptMode: newDecryptMode,
+                inputType: newDecryptMode ? "encrypted" : "text",
+                value: "",
               });
             }}
             style={{ display: "none" }}
@@ -204,7 +299,7 @@ function PlaintextNode({ id, data }) {
         {!isDecryptMode ? (
           <>
             <div>
-              <textarea style={{ width: '80%', lineHeight:1.4, padding:5, resize:'none' , overflow:'hidden', border: '1px solid #999', borderRadius:4, fontFamily:'monospace' }}
+              <textarea style={{ width: '80%', height: 80, lineHeight:1.4, padding:5, resize:'none' , overflow:'auto', border: '1px solid #999', borderRadius:4, fontFamily:'monospace' }}
                 placeholder="Text..." 
                 value={inputType === "text" ? text : ""} 
                 onChange={onTextChange} 
@@ -250,7 +345,6 @@ function PlaintextNode({ id, data }) {
                   inputType: "encrypted",
                   value: val,
                   isDecryptMode: true,
-                  decryptKey: decryptKey,
                 });
               }}
               placeholder="Paste encrypted text here..."
@@ -259,8 +353,9 @@ function PlaintextNode({ id, data }) {
                 padding: 5,
                 fontSize: 11,
                 fontFamily: "monospace",
-                resize: "vertical",
-                minHeight: 60,
+                resize: "none",
+                height: 80,
+                overflow: "auto",
                 border: "1px solid #999",
                 borderRadius: 4,
                 marginBottom: 8
@@ -274,41 +369,14 @@ function PlaintextNode({ id, data }) {
             </div>
             <input 
               type="file" 
-              accept=".enc,.bin,application/octet-stream" 
+              accept="*"
               onChange={onEncryptedFileChange}
               className="nodrag" 
             />
             <div style={{ fontSize: 11, color: "#444", marginTop: 2, marginBottom: 8 }}>
-              Upload encrypted file (.enc, .bin)
+              Upload encrypted file (.enc, .bin, or binary)
             </div>
 
-            {/* Passphrase/Key Input */}
-            <div style={{ fontSize: 11, fontWeight: "bold", marginBottom: 4 }}>
-              Passphrase / Key
-            </div>
-            <textarea 
-              value={decryptKey}
-              onChange={(e) => {
-                setDecryptKey(e.target.value);
-                // Update parent with passphrase whenever it changes
-                data.onChange?.(id, {
-                  isDecryptMode: true,
-                  decryptKey: e.target.value,
-                });
-              }}
-              placeholder="Enter passphrase or key..."
-              style={{
-                width: "95%",
-                padding: 5,
-                fontSize: 11,
-                border: "1px solid #999",
-                borderRadius: 4,
-                fontFamily: "monospace",
-                resize: "none",
-                minHeight: 50,
-              }}
-              className="nodrag"
-            />
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   addEdge,
   useEdgesState,
@@ -8,15 +8,12 @@ import ReactFlow, {
   MiniMap,
 } from "reactflow";
 
-
-import { encryptFileAES, decryptFileAES } from "./utils/aesFile";
-import { encryptFileDES, decryptFileDES } from "./utils/desFile";
 import { fileToPixelBytes } from "./components/crypto/imageToBytes";
+
 
 import "reactflow/dist/style.css";
 import "reactflow/dist/base.css";
-import { xorImageFileWithKey, xorRgbaBytesWithKey } from "./utils/imageXor";
-import { rgbaBytesToPngDataUrl } from "./utils/bytesToDataUrl";
+import { runCipherHandler, runXorHandler } from "./utils/cipherHandlers";
 
 
 import ModeMenu from "./components/layout/ModeMenu";
@@ -47,6 +44,7 @@ const nodeTypes = {
   decrypt: DecryptNode,
 };
 
+
 export default function App() {
   const [mode, setMode] = useState("ecb");
   const [showHandleLabels, setShowHandleLabels] = useState(false);
@@ -57,6 +55,70 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
   const [showFirst8, setShowFirst8] = useState(false);
   const [first8Trace, setFirst8Trace] = useState([]);
+  const lastIvBitsRef = useRef(null);
+
+  /**
+   * Encrypts an image using XOR operation with ECB or CBC mode.
+   * ECB: plaintext ⊕ key
+   * CBC: plaintext ⊕ previous_ciphertext (or IV for first block) ⊕ key
+   */
+  const onRunXor = useCallback(
+    async (blockId, currentNodes, currentEdges, currentMode) => {
+      await runXorHandler({
+        blockId,
+        currentNodes,
+        currentEdges,
+        currentMode,
+        setNodes,
+      });
+    },
+    [setNodes]
+  );
+
+  /**
+   * Main cipher execution handler.
+   * Routes to the appropriate cipher (XOR, AES, or DES) based on the block's settings.
+   * Supports both image and text encryption modes.
+   */
+  const onRunCipher = useCallback(
+    (blockId) => {
+      runCipherHandler({
+        blockId,
+        edges,
+        mode,
+        setNodes,
+        onRunXor,
+      });
+    },
+    [edges, mode, onRunXor, setNodes]
+  );
+
+  React.useEffect(() => {
+    if (mode !== "cbc") return;
+    const ivNode = nodes.find((n) => n.type === "iv");
+    const ivBits = ivNode?.data?.bits || "";
+    if (!ivBits || ivBits === lastIvBitsRef.current) return;
+
+    lastIvBitsRef.current = ivBits;
+
+    nodes
+      .filter((n) => n.type === "blockcipher")
+      .forEach((block) => {
+        if (block.data?.cipherType !== "aes") return;
+
+        const keyBits = block.data?.keyBits || "";
+        const isHexKey = /^[0-9a-f]+$/i.test(keyBits) && (keyBits.length === 32 || keyBits.length === 64);
+        const isBinaryKey = /^[01]+$/.test(keyBits) && keyBits.length >= 8;
+        const hasImageInput =
+          block.data?.plaintextFile ||
+          block.data?.encryptedImageFile ||
+          block.data?.inputType === "image" ||
+          block.data?.inputType === "encryptedImage";
+
+        if (!hasImageInput || (!isHexKey && !isBinaryKey)) return;
+        onRunCipher(block.id);
+      });
+  }, [mode, nodes, onRunCipher]);
 
   const defaultViewport = useMemo(() => {
     if (mode === "ecb") {
@@ -72,312 +134,6 @@ export default function App() {
 // }, [nodes]);
 
 
-  /**
-   * Encrypts an image using XOR operation with ECB or CBC mode.
-   * ECB: plaintext ⊕ key
-   * CBC: plaintext ⊕ previous_ciphertext (or IV for first block) ⊕ key
-   * Takes the image and key from the block cipher node, performs XOR encryption,
-   * then updates both the cipher node and connected ciphertext output node with the result.
-   */
-  const onRunXor = useCallback(async (blockId, currentNodes, currentEdges, currentMode) => {
-    const block = currentNodes.find((n) => n.id === blockId);
-    
-    if (!block) return;
-
-    console.log("🎯 onRunXor - block.data:", block.data);
-    console.log("   plaintextFile:", block.data.plaintextFile);
-    console.log("   encryptedImageFile:", block.data.encryptedImageFile);
-    console.log("   isDecryptMode:", block.data.isDecryptMode);
-    console.log("   keyBits:", block.data.keyBits);
-    console.log("   keyBits type:", typeof block.data.keyBits);
-    console.log("   keyBits is string?", typeof block.data.keyBits === 'string');
-    console.log("   mode:", currentMode);
-
-    // Check if decrypt mode
-    const isDecrypt = block.data.isDecryptMode;
-    const fileInput = isDecrypt ? block.data.encryptedImageFile : block.data.plaintextFile;
-    const keyBits = block.data.keyBits;
-
-    if (!fileInput || !keyBits) {
-      alert("Missing image or key!");
-      return;
-    }
-
-    // Ensure keyBits is a string
-    if (typeof keyBits !== 'string') {
-      console.log("❌ keyBits is not a string! Converting...", keyBits);
-      alert("Key bits format is invalid!");
-      return;
-    }
-
-    // Convert File object to pixel bytes
-    const input = await fileToPixelBytes(fileInput, { width: 256, height: 256 });
-
-    // Find output edge (to ciphertext node)
-    const outEdge = currentEdges.find((e) => e.source === blockId && e.sourceHandle === "out");
-    const ctId = outEdge?.target;
-
-    // For CBC mode: find previous ciphertext or IV
-    let prevBytes = null;
-    if (currentMode === 'cbc') {
-      // Look for XOR node connected to BlockCipher
-      const xorEdge = currentEdges.find((e) => e.target === blockId && e.targetHandle === "xor");
-      
-      if (xorEdge) {
-        // Found XOR node, get IV from the XOR node's inputs
-        const xorNode = currentNodes.find((n) => n.id === xorEdge.source);
-        console.log("🔍 CBC Mode - XOR node found:", xorNode?.id);
-        
-        if (xorNode) {
-          // Find IV or prevCipher connected to XOR node
-          const ivEdge = currentEdges.find((e) => e.target === xorNode.id && e.targetHandle === "pc");
-          if (ivEdge) {
-            const ivNode = currentNodes.find((n) => n.id === ivEdge.source);
-            console.log("🔍 IV/PrevCipher node found:", ivNode?.type, ivNode?.id);
-            
-            if (ivNode) {
-              if (ivNode.type === 'iv') {
-                // IV node: convert bits to bytes
-                const ivBits = ivNode.data.bits || "";
-                console.log("🔍 IV bits:", ivBits);
-                const clean = ivBits.replace(/\s+/g, "");
-                if (/^[01]+$/.test(clean) && clean.length % 8 === 0) {
-                  prevBytes = new Uint8Array(clean.length / 8);
-                  for (let i = 0; i < prevBytes.length; i++) {
-                    prevBytes[i] = parseInt(clean.slice(i * 8, i * 8 + 8), 2);
-                  }
-                  console.log("✅ IV bytes created:", Array.from(prevBytes.slice(0, 4)));
-                } else {
-                  console.log("❌ Invalid IV bits format");
-                }
-              } else if (ivNode.type === 'ciphertext' && ivNode.data.xorBytes) {
-                // Previous ciphertext: use xorBytes directly
-                prevBytes = ivNode.data.xorBytes;
-                console.log("✅ Previous ciphertext bytes:", Array.from(prevBytes.slice(0, 4)));
-              }
-            }
-          }
-        }
-      } else {
-        // Old flow: direct prevCipher connection to BlockCipher (fallback)
-        const prevEdge = currentEdges.find((e) => e.target === blockId && e.targetHandle === "prevCipher");
-        console.log("🔍 CBC Mode - Looking for prevCipher edge:", prevEdge);
-        
-        if (prevEdge) {
-          const prevNode = currentNodes.find((n) => n.id === prevEdge.source);
-          console.log("🔍 prevNode found:", prevNode?.type, prevNode?.id);
-          
-          if (prevNode) {
-            if (prevNode.type === 'iv') {
-              // IV node: convert bits to bytes
-              const ivBits = prevNode.data.bits || "";
-              console.log("🔍 IV bits:", ivBits);
-              const clean = ivBits.replace(/\s+/g, "");
-              if (/^[01]+$/.test(clean) && clean.length % 8 === 0) {
-                prevBytes = new Uint8Array(clean.length / 8);
-                for (let i = 0; i < prevBytes.length; i++) {
-                  prevBytes[i] = parseInt(clean.slice(i * 8, i * 8 + 8), 2);
-                }
-                console.log("✅ IV bytes created:", Array.from(prevBytes.slice(0, 4)));
-              } else {
-                console.log("❌ Invalid IV bits format");
-              }
-            } else if (prevNode.type === 'ciphertext' && prevNode.data.xorBytes) {
-              // Previous ciphertext: use xorBytes directly
-              prevBytes = prevNode.data.xorBytes;
-              console.log("✅ Previous ciphertext bytes:", Array.from(prevBytes.slice(0, 4)));
-            } else {
-              console.log("❌ prevNode type not IV or ciphertext, or no xorBytes");
-            }
-          }
-        } else {
-          console.log("❌ No prevCipher edge found");
-        }
-      }
-    }
-
-    console.log("🔍 Final prevBytes:", prevBytes ? Array.from(prevBytes.slice(0, 4)) : null);
-
-    // Perform XOR encryption
-    let outBytes;
-    if (currentMode === 'cbc' && prevBytes) {
-      console.log("🔐 CBC XOR: plaintext ⊕ prevBytes ⊕ key");
-      console.log("   Input first 4 pixels:", input.slice(0, 16));
-      console.log("   PrevBytes first 16:", Array.from(prevBytes.slice(0, 16)));
-      console.log("   KeyBits:", keyBits?.slice(0, 32));
-      
-      // CBC: plaintext ⊕ prevBytes ⊕ key
-      // First: XOR with prevBytes (Uint8Array ⊕ Uint8Array)
-      const withPrev = new Uint8Array(input.length);
-      for (let i = 0; i < input.length; i++) {
-        withPrev[i] = input[i] ^ prevBytes[i % prevBytes.length];
-      }
-      console.log("   After XOR with prevBytes, first 4 pixels:", withPrev.slice(0, 16));
-      
-      // Second: XOR with key (Uint8Array ⊕ bit string)
-      outBytes = xorRgbaBytesWithKey(withPrev, keyBits);
-      console.log("   After XOR with key, first 4 pixels:", outBytes.slice(0, 16));
-    } else {
-      console.log("🔐 ECB XOR: plaintext ⊕ key (or CBC without prevBytes)");
-      console.log("   Input first 4 pixels:", input.slice(0, 16));
-      console.log("   KeyBits:", keyBits?.slice(0, 32));
-      
-      // ECB or CBC without prevBytes: plaintext ⊕ key
-      outBytes = xorRgbaBytesWithKey(input, keyBits);
-      console.log("   Output first 4 pixels:", outBytes.slice(0, 16));
-    }
-
-    const outUrl = rgbaBytesToPngDataUrl(outBytes, 256, 256);
-
-    console.log("✅ XOR Complete - ctId:", ctId, "mode:", currentMode, "hasPrevBytes:", !!prevBytes);
-
-    // Update nodes with result
-    setNodes((nds) => nds.map((n) => {
-      if (n.id === blockId) {
-        return { ...n, data: { ...n.data, preview: outUrl, xorBytes: outBytes } };
-      }
-      if (ctId && n.id === ctId) {
-        return { ...n, data: { ...n.data, result: outUrl, xorBytes: outBytes } };
-      }
-      return n;
-    }));
-  }, [setNodes]);
-
-
-  /**
-   * Main cipher execution handler.
-   * Routes to the appropriate cipher (XOR, AES, or DES) based on the block's settings.
-   * Supports both image and text encryption modes.
-   */
-  const onRunCipher = useCallback(
-    (blockId) => {
-      setNodes((currentNodes) => {
-        console.log("onRunCipher fired", blockId);
-
-        const block = currentNodes.find((n) => n.id === blockId);
-        console.log("block found?", !!block, block?.data);
-        if (!block) return currentNodes;
-
-        const cipherType = block.data?.cipherType || "xor";
-        const isImageMode = !!block.data?.plaintextFile || !!block.data?.encryptedImageFile;
-        const isEncryptedInput = !!block.data?.encryptedImageFile;
-
-        console.log("cipherType =", cipherType);
-        console.log("isImageMode =", isImageMode);
-
-        if (cipherType === "xor") {
-          onRunXor(blockId, currentNodes, edges, mode); // ← Pass mode!
-          return currentNodes;
-        }
-
-        if (isImageMode) {
-          const file = isEncryptedInput ? block.data.encryptedImageFile : block.data.plaintextFile;
-          // For AES/DES, we need keyText, but we have keyBits from Key node
-          // Use keyBits directly as passphrase for AES
-          // For DES, convert first 64 bits to 8 characters
-          const keyBits = block.data.keyBits || "";
-          let keyText = block.data.keyText || "";
-
-          try {
-            if (cipherType === "aes") {
-              // Use keyBits as passphrase if no keyText provided
-              const passphrase = keyText || keyBits;
-              if (!passphrase) throw new Error("Missing AES key");
-              
-              const outEdge = edges.find((e) => e.source === blockId && e.sourceHandle === "out");
-              const ctId = outEdge?.target;
-
-              if (isEncryptedInput) {
-                decryptFileAES(file, passphrase).then(({ url }) => {
-                  setNodes((nds) => nds.map((n) => {
-                    if (n.id === blockId) {
-                      return { ...n, data: { ...n.data, preview: url, encryptedBlobUrl: undefined } };
-                    }
-                    if (ctId && n.id === ctId) {
-                      return { ...n, data: { ...n.data, result: url, encryptedBlobUrl: undefined } };
-                    }
-                    return n;
-                  }));
-                }).catch(err => {
-                  alert("AES decryption error: The key may be incorrect or the file may be corrupted. ");
-                });
-              } else {
-                encryptFileAES(file, passphrase).then(({ previewUrl, encryptedBlobUrl }) => {
-                  setNodes((nds) => nds.map((n) => {
-                    if (n.id === blockId) {
-                      return { ...n, data: { ...n.data, preview: previewUrl, encryptedBlobUrl } };
-                    }
-                    if (ctId && n.id === ctId) {
-                      return { ...n, data: { ...n.data, result: previewUrl, encryptedBlobUrl } };
-                    }
-                    return n;
-                  }));
-                }).catch(err => {
-                  alert("AES encryption error: " + err.message);
-                });
-              }
-            } else if (cipherType === "des") {
-              // For DES: convert first 64 bits to 8 characters, or use keyText
-              if (!keyText && keyBits) {
-                if (keyBits.length < 64) {
-                  throw new Error("DES requires at least 64 bits. Please generate 128 or 256 bit key.");
-                }
-                keyText = "";
-                for (let i = 0; i < 8; i++) {
-                  const byte = keyBits.slice(i * 8, i * 8 + 8);
-                  keyText += String.fromCharCode(parseInt(byte, 2));
-                }
-              }
-              
-              if (!keyText || keyText.length !== 8) {
-                throw new Error("DES key must be exactly 8 characters");
-              }
-              
-              const outEdge = edges.find((e) => e.source === blockId && e.sourceHandle === "out");
-              const ctId = outEdge?.target;
-
-              if (isEncryptedInput) {
-                decryptFileDES(file, keyText).then(({ url }) => {
-                  setNodes((nds) => nds.map((n) => {
-                    if (n.id === blockId) {
-                      return { ...n, data: { ...n.data, preview: url, encryptedBlobUrl: undefined } };
-                    }
-                    if (ctId && n.id === ctId) {
-                      return { ...n, data: { ...n.data, result: url, encryptedBlobUrl: undefined } };
-                    }
-                    return n;
-                  }));
-                }).catch(err => {
-                  alert("DES decryption error: " + err.message);
-                });
-              } else {
-                encryptFileDES(file, keyText).then(({ previewUrl, encryptedBlobUrl }) => {
-                  setNodes((nds) => nds.map((n) => {
-                    if (n.id === blockId) {
-                      return { ...n, data: { ...n.data, preview: previewUrl, encryptedBlobUrl } };
-                    }
-                    if (ctId && n.id === ctId) {
-                      return { ...n, data: { ...n.data, result: previewUrl, encryptedBlobUrl } };
-                    }
-                    return n;
-                  }));
-                }).catch(err => {
-                  alert("DES encryption error: " + err.message);
-                });
-              }
-            }
-          } catch (e) {
-            alert(String(e?.message || e));
-          }
-        } else {
-          alert("AES/DES text mode not implemented yet");
-        }
-        
-        return currentNodes;
-      });
-    },
-    [onRunXor, setNodes, edges, mode]
-  );
 
 
   /**
@@ -495,13 +251,14 @@ export default function App() {
             ...n.data,
             showHandleLabels,
             onChange: (id, patch) => {
+              console.log('🔗 App.onChange triggered for node:', id, 'patch:', patch);
               setNodes((nds) => {
                 const next = nds.map((nn) =>
                   nn.id === id
                     ? { ...nn, data: { ...nn.data, ...patch } }
                     : nn
                 );
-                
+                console.log('🔗 Calling computeGraphValues, mode:', m);
                 return computeGraphValues(next, preset.edges, m);
               });
             },

@@ -31,7 +31,15 @@ export function makeIsValidConnection(mode) {
     const sourceNode = nodes.find((n) => n.id === params.source);
     const targetNode = nodes.find((n) => n.id === params.target);
 
-    // BlockCipher -> Ciphertext (ECB mode)
+    // Debug logging
+    const srcType = sourceNode?.type;
+    const tgtType = targetNode?.type;
+    const srcHandle = params.sourceHandle;
+    const tgtHandle = params.targetHandle;
+    
+    const connectionStr = `${srcType}(${srcHandle}) -> ${tgtType}(${tgtHandle})`;
+    
+    // Start checking rules
     if (
       mode === "ecb" &&
       sourceNode?.type === "blockcipher" &&
@@ -213,6 +221,11 @@ export function makeIsValidConnection(mode) {
       return true;
     }
 
+    // Connection rejected - log for debugging
+    console.log(`❌ REJECTED [${mode}]: ${connectionStr}`);
+    console.log("   Source:", sourceNode?.id, sourceNode?.type);
+    console.log("   Target:", targetNode?.id, targetNode?.type);
+    
     return false;
   };
 }

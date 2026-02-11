@@ -10,7 +10,7 @@ export function buildEcbPreset() {
       position: { x: 220, y: -260 },
       data: {
         inputType: 'bits',
-        value: '10110010',
+        value: '01001000',  // "H" in binary
       }
     },
     {
@@ -58,7 +58,7 @@ export function buildCbcPreset() {
     },
     { id: 'b1', type: 'blockcipher', position: { x: 260, y: 160 }, data: {} },
     { id: 'c1', type: 'ciphertext', position: { x: 260, y: 350 }, data: {} },
-    { id: 'iv1', type: 'iv', position: { x: -100, y: -70 }, data: { bits: '00001111' } },
+    { id: 'iv1', type: 'iv', position: { x: -100, y: -70 }, data: { bits: '00001111000011110000111100001111000011110000111100001111000011110000111100001111000011110000111100001111000011110000111100001111' } },
     { id: 'x1', type: 'xor', position: { x: 260, y: -70 }, data: {} },
   ];
 
@@ -116,8 +116,8 @@ export function buildCtrPreset() {
     { id: 'e-p-x', source: 'p1', sourceHandle: 'outRight', target: 'x1', targetHandle: 'ptLeft', animated: true, data: {}, style: { stroke: 'green' } },
     { id: 'e-k-b', source: 'k1', sourceHandle: 'out', target: 'b1', targetHandle: 'key', animated: true, data: {}, style: { stroke: 'blue' } },
     { id: 'e-ctr-b', source: 'ctr1', sourceHandle: 'out', target: 'b1', targetHandle: 'ctr', animated: true, data: {}, style: { stroke: '#5a4ecb' } },
-    { id: 'e-b-x', source: 'b1', sourceHandle: 'out', target: 'x1', targetHandle: 'pcTop', animated: true, data: {}, style: { stroke: '#5a4ecb' } },
-    { id: 'e-x-c', source: 'x1', sourceHandle: 'out', target: 'c1', targetHandle: 'in', animated: true, data: {}, style: { stroke: 'orange' } },
+    { id: 'e-b-x', source: 'b1', sourceHandle: 'out', target: 'x1', targetHandle: 'pcTop', animated: true, data: {}, style: { stroke: 'orange' } },
+    { id: 'e-x-c', source: 'x1', sourceHandle: 'out', target: 'c1', targetHandle: 'in', animated: true, data: {}, style: { stroke: 'pink' } },
   ];
 
   return { nodes, edges };

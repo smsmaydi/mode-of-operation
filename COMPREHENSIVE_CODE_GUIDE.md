@@ -1,4 +1,74 @@
-# 📚 Mode of Operation Visualization — Comprehensive Code Guide (EN)
+# Comprehensive Code Guide
+
+This guide summarizes the architecture, data flow, and key modules.
+
+## Architecture
+
+## Data Flow
+1. User input updates node data.
+2. `setNodes` triggers `computeGraphValues`.
+3. BlockCipher prepares outputs.
+4. Ciphertext renders result.
+
+## Modes
+
+## Key Functions
+
+## Extending
+# Mode of Operation Visualization — Code Guide
+
+Concise guide to the project structure and core flow.
+
+## Architecture
+
+```
+src/
+  App.js
+  components/
+    nodes/ (Plaintext, Key, IV, BlockCipher, Ciphertext, CTR, XOR)
+    layout/ (ModeMenu, edges)
+    palette/ (NodePalette)
+    crypto/ (imageToBytes)
+  utils/
+    computeGraph.js
+    validators.js
+    presets.js
+    aesFile.js, desFile.js, imageXor.js, xorImageFile.js
+    bytesToDataUrl.js, bitwise.js
+```
+
+## Data flow
+
+1. User updates node input.
+2. `computeGraphValues()` builds `valueMap` and computes node outputs.
+3. UI re-renders with updated `node.data`.
+4. For image input, user clicks Run → `onRunCipher()` executes and updates output.
+
+## Core functions
+
+- `computeGraphValues()` — main state propagation.
+- `onRunCipher()` — routes to XOR/AES/DES handlers.
+- `onRunXor()` — image XOR path (supports CBC chaining).
+- `applyMode()` — loads ECB/CBC/CTR presets.
+
+## Node data (summary)
+
+- Plaintext: `inputType`, `value`, `bits`, `text`, `file`.
+- Key: `bits`.
+- IV: `bits`.
+- BlockCipher: `cipherType`, `preview`, `fullBinary`, `plaintextFile`, `keyBits`.
+- Ciphertext: `result`, `fullBinary`, `xorBytes`.
+
+## Modes
+
+- **ECB:** $C = P \oplus K$
+- **CBC:** $C_i = (P_i \oplus C_{i-1}) \oplus K$ (IV for $C_0$)
+- **CTR:** $C = P \oplus Keystream$ (nonce+counter)
+
+## References
+
+- Data flow details: [DATA_FLOW_REFERENCE.md](DATA_FLOW_REFERENCE.md)
+- Diagram overview: [UML_DIAGRAMS.md](UML_DIAGRAMS.md)# 📚 Mode of Operation Visualization — Comprehensive Code Guide (EN)
 
 ## Table of Contents
 1. [Project Architecture](#project-architecture)
@@ -25,7 +95,8 @@ src/
 │   │   ├── CiphertextNode.jsx       # output display
 │   │   ├── IVNode.jsx               # CBC IV input
 │   │   ├── XorPreBlockNode.jsx      # CBC pre-XOR
-│   │   └── CtrNode.jsx              # CTR nonce + counter
+# 📚 Mode of Operation Visualization — Comprehensive Code Guide (EN)
+
 │   ├── crypto/
 │   │   └── imageToBytes.js          # file → pixel bytes
 │   ├── layout/
@@ -34,7 +105,7 @@ src/
 │   │   └── SineEdge.jsx             # edge renderer
 │   └── palette/
 │       └── NodePalette.jsx          # drag & drop palette
-└── utils/
+
     ├── computeGraph.js              # ⭐ state propagation engine
     ├── validators.js                # connection rules
     ├── bitwise.js                   # bit XOR helpers
@@ -110,7 +181,7 @@ User Input (text/bits/image) → Plaintext/Key/IV nodes
 
 ---
 
-### `computeGraphValues(nodes, edges, mode)`
+
 
 **Purpose:** The main state engine.
 
@@ -119,7 +190,7 @@ User Input (text/bits/image) → Plaintext/Key/IV nodes
 2. Process XOR nodes (CBC only).
 3. Process BlockCipher nodes (text/bits immediate; images prepared).
 4. Update Ciphertext nodes with results.
-5. Return a new nodes array.
+
 
 ---
 
@@ -129,7 +200,7 @@ User Input (text/bits/image) → Plaintext/Key/IV nodes
 ```js
 {
   inputType: 'bits' | 'text' | 'image' | 'encrypted',
-  value: string | File,
+
   onChange,
   showHandleLabels
 }
@@ -141,7 +212,7 @@ User Input (text/bits/image) → Plaintext/Key/IV nodes
   bits: string,
   onChange,
   showHandleLabels
-}
+
 ```
 
 ### BlockCipherNode
@@ -186,7 +257,7 @@ IV/Prev ───┘
 ```
 
 ### CTR
-```
+
 Nonce||Counter ─┐
                ├─ XOR → Keystream
 Key ───────────┘
@@ -198,105 +269,6 @@ Plaintext ⊕ Keystream → Ciphertext
 ## UML Diagrams (Overview)
 
 See [UML_DIAGRAMS.md](UML_DIAGRAMS.md) for detailed sequence, state, and activity diagrams.
-# 📚 Mode of Operation Visualization - Kapsamlı Kod Rehberi
-
-## İçindekiler
-1. [Proje Mimarisi](#proje-mimarisi)
-2. [Data Akış Modeli](#data-akış-modeli)
-3. [Tüm Fonksiyonlar Detayı](#tüm-fonksiyonlar-detayı)
-4. [Node Veri Yapıları](#node-veri-yapıları)
-5. [Şifreleme Modları (ECB/CBC/CTR)](#şifreleme-modları)
-6. [UML Diyagramları](#uml-diyagramları)
-
----
-
-## Proje Mimarisi
-
-### Dosya Yapısı
-
-```
-src/
-├── App.js                           # Ana uygulama + state yönetimi
-├── components/
-│   ├── nodes/                       # ReactFlow node komponentleri
-│   │   ├── PlaintextNode.jsx       # Girdi (text/bits/resim)
-│   │   ├── KeyNode.jsx              # Şifre anahtarı
-│   │   ├── BlockCipherNode.jsx      # Şifreleme işlemi (XOR/AES/DES)
-│   │   ├── CiphertextNode.jsx       # Çıktı (şifreli metin)
-│   │   ├── IVNode.jsx               # Başlatma vektörü (CBC için)
-│   │   ├── XorPreBlockNode.jsx      # CBC öncesi XOR
-│   │   ├── CtrNode.jsx              # CTR modunda nonce+counter
-│   │   └── XorBinaryNode.jsx        # İkili XOR görselleştirmesi
-│   ├── crypto/
-│   │   └── imageToBytes.js          # Resim → byte dönüşümü
-│   ├── layout/
-│   │   ├── ModeMenu.jsx             # Mod seçici menü
-│   │   ├── StepEdge.jsx             # Kenar şekli
-│   │   └── SineEdge.jsx             # Sinüs kenarı
-│   └── palette/
-│       └── NodePalette.jsx          # Sürükle-bırak node paleti
-└── utils/
-    ├── computeGraph.js              # ⭐ Ana hesaplama motoru
-    ├── validators.js                # Bağlantı doğrulama kuralları
-    ├── bitwise.js                   # XOR ve bit işlemleri
-    ├── presets.js                   # ECB/CBC/CTR başlangıç layoutları
-    ├── imageXor.js                  # XOR resim şifreleme
-    ├── xorImageFile.js              # Dosya XOR işlemleri
-    ├── aesFile.js                   # AES şifreleme/deşifre
-    ├── desFile.js                   # DES şifreleme/deşifre
-    ├── bytesToDataUrl.js            # Byte → PNG dönüşümü
-    ├── ecbTrace.js                  # Blok izleme ve göz izi
-    └── nodeHelpers.js               # Yardımcı fonksiyonlar
-```
-
----
-
-## Data Akış Modeli
-
-### 🔄 Genel Akış Şeması
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        USER INPUT                               │
-│  (Text/Bits/Image input, Key, IV)                               │
-└────────────────────────────────────┬────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│               PlaintextNode / KeyNode / IVNode                  │
-│    node.data.value → valueMap {"type", "value"}                 │
-└────────────────────────────────────┬────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              computeGraphValues() - State Engine                │
-│  1. valueMap harita oluştur (tip + değer)                       │
-│  2. XOR node'lar hesapla (CBC için)                             │
-│  3. BlockCipher node'lar hesapla (ECB/CBC/CTR)                  │
-│  4. Ciphertext node'lar doldur                                  │
-│  5. Tüm node'ları return (yeni referans)                        │
-└────────────────────────────────────┬────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│            BlockCipherNode.data güncellemesi                    │
-│  ├─ preview: string (sonuç önizlemesi)                          │
-│  ├─ fullBinary: bits (tam sonuç)                                │
-│  └─ plaintextFile/keyBits: image mode için                      │
-└────────────────────────────────────┬────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│               Kullanıcı "Run XOR/AES/DES" Tıklar               │
-│         onRunCipher() → onRunXor() / encryptFileAES() ...      │
-└────────────────────────────────────┬────────────────────────────┘
-                                     │
-                                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│     CiphertextNode.data.result = Şifreli Sonuç (PNG/Text)      │
-│          node.data.xorBytes: Uint8Array (raw bytes)             │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ### ECB vs CBC vs CTR Modunda Data Akışı
 

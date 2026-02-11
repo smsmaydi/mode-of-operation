@@ -9,6 +9,17 @@ function BlockCipherNode({ id, data }) {
 
   const [cipherType, setCipherType] = useState(data.cipherType || "xor");
 
+  console.log("🔹 BlockCipherNode render, id:", id, "data.inputType:", data.inputType, "data.plaintextFile:", !!data.plaintextFile, "data.encryptedImageFile:", !!data.encryptedImageFile);
+
+  // Auto-update cipherType when PlaintextNode sends it (e.g., when loading encrypted file)
+  useEffect(() => {
+    if (data.cipherType && data.cipherType !== cipherType) {
+      console.log("🔄 BlockCipherNode: cipherType updated from", cipherType, "to", data.cipherType);
+      console.log("   data keys:", Object.keys(data));
+      setCipherType(data.cipherType);
+    }
+  }, [data.cipherType]);
+
   // Auto-trigger Run for encrypted image files
   useEffect(() => {
     if (data.inputType === "encryptedImage" && data.encryptedImageFile && data.keyBits) {
@@ -124,11 +135,25 @@ function BlockCipherNode({ id, data }) {
         <option value="des">DES</option>
       </select>
 
+      {/* Run button for image/file mode or when plaintextFile/encryptedImageFile exist */}
       <div style={{ marginTop: 10 }}>
-        <button className="nodrag" onClick={() => data.onRunCipher?.(id)} style={{ borderRadius: 5, border: "solid 1px #333", cursor: "pointer" }}>
+        <button 
+          className="nodrag" 
+          onClick={() => {
+            console.log("🏃 Run button clicked, calling onRunCipher for:", id);
+            data.onRunCipher?.(id);
+          }}
+          style={{ 
+            borderRadius: 5, 
+            border: "solid 1px #333", 
+            cursor: "pointer",
+            backgroundColor: "#fff",
+            padding: "4px 12px"
+          }}
+        >
           Run
         </button>
-      </div>      
+      </div>
     </div>
   );
 }

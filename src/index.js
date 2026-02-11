@@ -4,34 +4,36 @@ import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 
-const resizeObserverErr = /ResizeObserver loop completed/;
-const resizeObserverWarn = /ResizeObserver loop limit exceeded/;
-
-console.error = (function (orig) {
-  return function (...args) {
-    if (typeof args[0] === "string" && args[0].includes("ResizeObserver")) return;
-    orig(...args);
-  };
-})(console.error);
-
-
-
-const handler = (e) => {
-  if (resizeObserverErr.test(e.message) || resizeObserverWarn.test(e.message)) {
-    e.stopImmediatePropagation();
+// COMPLETE ResizeObserver suppression - suppress ALL ResizeObserver errors silently
+window.addEventListener("error", (e) => {
+  if (e.message?.includes("ResizeObserver") || e.error?.message?.includes("ResizeObserver")) {
     e.preventDefault();
-    console.warn("⚠️ Suppressed ResizeObserver error:", e.message);
+    e.stopImmediatePropagation();
     return false;
   }
+}, true);
+
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = e.reason?.message?.toString() || "";
+  if (msg.includes("ResizeObserver")) {
+    e.preventDefault();
+  }
+}, true);
+
+// Patch console to suppress ResizeObserver
+const originalError = console.error;
+console.error = function(...args) {
+  const msg = args.join(" ");
+  if (msg.includes("ResizeObserver")) return;
+  originalError.apply(console, args);
 };
 
-window.addEventListener("error", handler);
-window.addEventListener("unhandledrejection", (e) => {
-  if (resizeObserverErr.test(e.reason?.message)) {
-    e.stopImmediatePropagation();
-    console.warn("⚠️ Suppressed ResizeObserver rejection:", e.reason?.message);
-  }
-});
+const originalWarn = console.warn;
+console.warn = function(...args) {
+  const msg = args.join(" ");
+  if (msg.includes("ResizeObserver")) return;
+  originalWarn.apply(console, args);
+};
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

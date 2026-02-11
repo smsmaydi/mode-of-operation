@@ -1,20 +1,28 @@
-import React, {useState, useRef, useLayoutEffect} from "react";
+import React, {useState, useEffect} from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
 
 function CiphertextNode({ id, data }) {
+  console.log('📦 CiphertextNode rendered, id:', id, 'data.result:', data?.result?.slice(0, 40));
   const instance = useReactFlow();
   const result = data?.result || "";
+  console.log('📦 CiphertextNode result state:', result);
   const [buttonText, setButtonText] = useState("Copy Binary");
+  const [deferredResult, setDeferredResult] = useState("");
   const showLabels = !!data?.showHandleLabels;
-  const taRef = useRef(null);
 
-  
+  // Defer rendering image to prevent ResizeObserver loop
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDeferredResult(result);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [result]);
 
   // Image files starts with blob: or data:image
   const isImage =
-    typeof result === "string" &&
-    (result.startsWith("blob:") || result.startsWith("data:image"));
+    typeof deferredResult === "string" &&
+    (deferredResult.startsWith("blob:") || deferredResult.startsWith("data:image"));
 
   const showTextArea =
     result &&
@@ -32,17 +40,6 @@ function CiphertextNode({ id, data }) {
     }
   };
 
-  useLayoutEffect(() => {
-    if (!taRef.current || !showTextArea) return;
-    const timer = setTimeout(() => {
-      if (taRef.current) {
-        taRef.current.style.height = "auto";
-        taRef.current.style.height = `${taRef.current.scrollHeight}px`;
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [result, showTextArea]);
-
   return (
     <div
       style={{
@@ -50,7 +47,10 @@ function CiphertextNode({ id, data }) {
         border: "1px solid #999",
         borderRadius: 6,
         background: "#fff",
-        minWidth: 220,
+        minWidth: 200,
+        minHeight: 160,
+        maxHeight: 400,
+        overflow: "auto",
         position: "relative",
       }}
     >
@@ -90,7 +90,7 @@ function CiphertextNode({ id, data }) {
         {isImage && (
           <>
             <img
-              src={result}
+              src={deferredResult}
               alt="cipher"
               style={{ width: "100%", height: "100%", objectFit:"contain", borderRadius: 4, display: 'block' }}
             />
@@ -112,13 +112,12 @@ function CiphertextNode({ id, data }) {
               // Decrypt mode display
               <>
                 <textarea
-                  value={`${data?.cipherType?.toUpperCase() || "AES"}\nENC: ${(data?.fullBinary || "").slice(0, 100)}...\nPlaintext: ${data.decryptedContent}`}
+                  value={`${data?.cipherType?.toUpperCase() || "AES"}\nENC: ${data?.fullBinary || ""}\nPlaintext: ${data.decryptedContent}`}
                   readOnly
                   className="nodrag"
                   style={{
                     width: "90%",
-                    minHeight: 60,
-                    maxHeight: 200,
+                    height: 120,
                     background: "white",
                     border: "1px solid #aaa",
                     borderRadius: 6,
@@ -131,7 +130,8 @@ function CiphertextNode({ id, data }) {
                     overflow: "auto",
                     whiteSpace: "pre-wrap",
                     wordBreak: "break-all",
-                    lineHeight: 1.5
+                    lineHeight: 1.5,
+                    boxSizing: "border-box"
                   }}
                 />
                 <button
@@ -157,13 +157,12 @@ function CiphertextNode({ id, data }) {
             ) : (
               // Encrypt mode display (original)
               <textarea
-                ref={taRef}
                 value={result}
                 readOnly
                 className="nodrag"
                 style={{
                   width: "90%",
-                  minHeight: 60,
+                  height: 120,
                   background: "white",
                   border: "1px solid #aaa",
                   borderRadius: 6,
@@ -173,10 +172,11 @@ function CiphertextNode({ id, data }) {
                   fontFamily: "monospace",
                   fontSize: 11,
                   resize: "none",
-                  overflow: "hidden",
+                  overflow: "auto",
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-all",
-                  lineHeight: 1.5
+                  lineHeight: 1.5,
+                  boxSizing: "border-box"
                 }}
               />
             )}
@@ -185,7 +185,7 @@ function CiphertextNode({ id, data }) {
 
         {!result && (
           <div style={{ fontSize: 12, color: "#666" }}>
-            Waiting for XOR result...
+            Waiting for result...
           </div>
         )}
       </div>
