@@ -37,16 +37,7 @@ function KeyNode({ id, data }) {
       .join("");
   };
 
-  const generateRandomAscii = (length) => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let out = "";
-    for (let i = 0; i < length; i++) {
-      out += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return out;
-  };
-
-  const { cipherType, targetBlockId } = useMemo(() => {
+  const { cipherType } = useMemo(() => {
     const outgoing = edges.filter((e) => e.source === id);
 
     const toBlock = outgoing
@@ -60,15 +51,31 @@ function KeyNode({ id, data }) {
     if (toBlock.length === 0) return { cipherType: "xor", targetBlockId: null };
 
     const chosen = toBlock[0].target;
-    return {
-      cipherType: chosen.data?.cipherType || "xor",
-      targetBlockId: chosen.id,
-    };
+    return { cipherType: chosen.data?.cipherType || "xor" };
   }, [edges, nodes, id]);
 
   const showXor = cipherType === "xor";
   const showAes = cipherType === "aes";
-  const showDes = cipherType === "des";
+
+  const formatHexPairs = (str) => {
+    if (typeof str !== "string") return "";
+    const cleaned = str.replace(/\s/g, "").replace(/[^0-9a-fA-F]/g, "");
+    return cleaned.replace(/(.{2})/g, "$1 ").trim();
+  };
+  /** AES key: 32 hex chars as two lines, 8 chars + space + 8 chars per line */
+  const formatAesKeyTwoLines = (str) => {
+    if (typeof str !== "string") return "";
+    const c = str.replace(/\s/g, "").replace(/[^0-9a-fA-F]/g, "").slice(0, 32);
+    const g1 = c.slice(0, 8);
+    const g2 = c.slice(8, 16);
+    const g3 = c.slice(16, 24);
+    const g4 = c.slice(24, 32);
+    const line1 = (g1 + " " + g2).trim();
+    const line2 = (g3 + " " + g4).trim();
+    return line2 ? line1 + "\n" + line2 : line1 || "";
+  };
+  const unformatHexPairs = (str) =>
+    (str || "").replace(/\s/g, "").replace(/[^0-9a-fA-F]/g, "");
 
   return (
     <div
@@ -125,22 +132,7 @@ function KeyNode({ id, data }) {
                 background: '#fff'
               }}
             >
-              🎲 128
-            </button>
-            <button 
-              onClick={() => data.onChange?.(id, { bits: generateRandomBits(256) })}
-              className="nodrag"
-              style={{ 
-                flex: 1, 
-                padding: '4px', 
-                fontSize: 10, 
-                cursor: 'pointer',
-                borderRadius: 4,
-                border: '1px solid #999',
-                background: '#fff'
-              }}
-            >
-              🎲 256
+              🎲 128 bit
             </button>
           </div>
         </div>
@@ -148,95 +140,41 @@ function KeyNode({ id, data }) {
 
       {showAes && (
         <div style={{ marginTop: 8 }}>
-          <label style={{ fontSize: 12, fontWeight: "bold" }}>AES key:</label>
-          <input
-            value={data.keyText || ""}
-            onChange={(e) => data.onChange?.(id, { keyText: e.target.value })}
-            placeholder="passphrase"
+          <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>AES key (hex):</div>
+          <textarea
+            value={formatAesKeyTwoLines(data.keyText || "")}
+            onChange={(e) => data.onChange?.(id, { keyText: unformatHexPairs(e.target.value) })}
+            placeholder={"12345678 12345678\n12345678 12345678"}
+            rows={2}
             style={{
               width: "100%",
-              padding: "3px 6px",
-              fontSize: 12,
+              padding: "4px 6px",
+              fontSize: 11,
+              fontFamily: "monospace",
+              letterSpacing: "0.05em",
               borderRadius: 4,
               border: "1px solid #999",
-              marginTop: 4,
               background: "white",
+              resize: "none",
+              boxSizing: "border-box",
             }}
           />
-          <div style={{ marginTop: 4, display: 'flex', gap: 4 }}>
-            <button 
+          <div style={{ marginTop: 4 }}>
+            <button
               onClick={() => data.onChange?.(id, { keyText: generateRandomHex(128) })}
               className="nodrag"
-              style={{ 
-                flex: 1, 
-                padding: '4px', 
-                fontSize: 10, 
-                cursor: 'pointer',
+              style={{
+                padding: "4px 10px",
+                fontSize: 10,
+                cursor: "pointer",
                 borderRadius: 4,
-                border: '1px solid #999',
-                background: '#fff'
+                border: "1px solid #999",
+                background: "#fff",
               }}
             >
-              🎲 128
-            </button>
-            <button 
-              onClick={() => data.onChange?.(id, { keyText: generateRandomHex(256) })}
-              className="nodrag"
-              style={{ 
-                flex: 1, 
-                padding: '4px', 
-                fontSize: 10, 
-                cursor: 'pointer',
-                borderRadius: 4,
-                border: '1px solid #999',
-                background: '#fff'
-              }}
-            >
-              🎲 256
+              🎲 128 bit
             </button>
           </div>
-        </div>
-      )}
-
-      {showDes && (
-        <div style={{ marginTop: 8 }}>
-          <label style={{ fontSize: 12, fontWeight: "bold" }}>DES key (8 chars):</label>
-          <input
-            value={data.keyText || ""}
-            onChange={(e) => data.onChange?.(id, { keyText: e.target.value })}
-            placeholder="8 characters"
-            style={{
-              width: "100%",
-              padding: "3px 6px",
-              fontSize: 12,
-              borderRadius: 4,
-              border: "1px solid #999",
-              marginTop: 4,
-              background: "white",
-            }}
-          />
-          <div style={{ marginTop: 4, display: 'flex', gap: 4 }}>
-            <button 
-              onClick={() => data.onChange?.(id, { keyText: generateRandomAscii(8) })}
-              className="nodrag"
-              style={{ 
-                flex: 1, 
-                padding: '4px', 
-                fontSize: 10, 
-                cursor: 'pointer',
-                borderRadius: 4,
-                border: '1px solid #999',
-                background: '#fff'
-              }}
-            >
-              🎲 8 chars
-            </button>
-          </div>
-          {(data.keyText || "").length !== 8 && (
-            <div style={{ fontSize: 11, color: "#900", marginTop: 4 }}>
-              Key length must be exactly 8 characters
-            </div>
-          )}
         </div>
       )}
     </div>

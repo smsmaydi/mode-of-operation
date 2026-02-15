@@ -48,17 +48,20 @@ function encryptBitsWithAES(bits, keyPassphrase) {
     const plaintext = binaryToText(bits);
     if (!plaintext) return null;
     
+    // Normalize key: strip spaces so "f4 41 b5 64" is treated as hex
+    const keyNormalized = String(keyPassphrase).replace(/\s/g, "").trim();
+    
     // Check if key is in HEX format (only 0-9, a-f, A-F characters and even length)
-    const isHexKey = /^[0-9a-fA-F]+$/.test(keyPassphrase) && keyPassphrase.length % 2 === 0;
-    const isBinaryKey = /^[01]+$/.test(keyPassphrase) && keyPassphrase.length % 8 === 0;
+    const isHexKey = /^[0-9a-fA-F]+$/.test(keyNormalized) && keyNormalized.length % 2 === 0;
+    const isBinaryKey = /^[01]+$/.test(keyNormalized) && keyNormalized.length % 8 === 0;
     
     // Convert binary key to hex if needed
-    let keyForAes = keyPassphrase;
+    let keyForAes = keyNormalized;
     if (isBinaryKey) {
-      keyForAes = bitsToHex(keyPassphrase);
+      keyForAes = bitsToHex(keyNormalized);
     }
     
-    // Parse key accordingly
+    // Parse key accordingly (hex key must be 16 or 32 bytes for AES-128/256)
     const key = isHexKey || isBinaryKey
       ? CryptoJS.enc.Hex.parse(keyForAes)
       : CryptoJS.enc.Utf8.parse(keyForAes);

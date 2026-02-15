@@ -4,12 +4,26 @@ import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 
-// COMPLETE ResizeObserver suppression - suppress ALL ResizeObserver errors silently
+// Prevent ResizeObserver loop: run callback in next frame so it doesn't fire during layout
+if (typeof window.ResizeObserver !== "undefined") {
+  const Original = window.ResizeObserver;
+  window.ResizeObserver = class extends Original {
+    constructor(callback) {
+      super((entries, observer) => {
+        requestAnimationFrame(() => {
+          callback(entries, observer);
+        });
+      });
+    }
+  };
+}
+
+// Suppress any remaining ResizeObserver error messages
 window.addEventListener("error", (e) => {
   if (e.message?.includes("ResizeObserver") || e.error?.message?.includes("ResizeObserver")) {
     e.preventDefault();
     e.stopImmediatePropagation();
-    return false;
+    return true;
   }
 }, true);
 

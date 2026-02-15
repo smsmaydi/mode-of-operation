@@ -109,7 +109,7 @@ export function buildCtrPreset() {
     },
     { id: 'b1', type: 'blockcipher', position: { x: 40, y: 80 }, data: {} },
     { id: 'x1', type: 'xor', position: { x: 40, y: 260 }, data: {} },
-    { id: 'c1', type: 'ciphertext', position: { x: 0, y: 560 }, data: {} },
+    { id: 'c1', type: 'ciphertext', position: { x: 0, y: 560 }, data: {}, draggable: false },
   ];
 
   const edges = [

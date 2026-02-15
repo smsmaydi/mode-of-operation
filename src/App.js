@@ -32,6 +32,7 @@ import { computeGraphValues } from "./utils/computeGraph";
 import { buildPreset } from "./utils/presets";
 import { makeIsValidConnection } from "./utils/validators";
 import { ecbFirstNTrace, ecbFirstNTraceFromBytes } from "./utils/ecbTrace";
+import SubBytesView from "./components/aes/SubBytesView";
 
 const nodeTypes = {
   plaintext: PlaintextNode,
@@ -44,6 +45,26 @@ const nodeTypes = {
   decrypt: DecryptNode,
 };
 
+/** Find plaintext node that feeds this ciphertext (via block or block<-xor). */
+function getPlaintextNodeForCiphertext(nodes, edges, ciphertextId) {
+  const edgeToCipher = edges.find((e) => e.target === ciphertextId);
+  if (!edgeToCipher) return null;
+  const blockId = edgeToCipher.source;
+  const edgeToBlock = edges.find(
+    (e) => e.target === blockId && (e.targetHandle === "plaintext" || e.targetHandle === "xor")
+  );
+  if (!edgeToBlock) return null;
+  if (edgeToBlock.targetHandle === "plaintext") {
+    return nodes.find((n) => n.id === edgeToBlock.source);
+  }
+  const xorId = edgeToBlock.source;
+  const edgeToXor = edges.find(
+    (e) => e.target === xorId && (e.targetHandle === "pt" || e.targetHandle === "ptLeft" || e.targetHandle === "plaintext")
+  );
+  if (!edgeToXor) return null;
+  return nodes.find((n) => n.id === edgeToXor.source);
+}
+
 
 export default function App() {
   const [mode, setMode] = useState("ecb");
@@ -55,7 +76,29 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
   const [showFirst8, setShowFirst8] = useState(false);
   const [first8Trace, setFirst8Trace] = useState([]);
+  const [showAesSubBytesView, setShowAesSubBytesView] = useState(false);
+  const [aesViewPayload, setAesViewPayload] = useState(null);
+  const [aesStepsLastRound, setAesStepsLastRound] = useState(0);
   const lastIvBitsRef = useRef(null);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+
+  React.useEffect(() => {
+    nodesRef.current = nodes;
+    edgesRef.current = edges;
+  }, [nodes, edges]);
+
+  const openAesSubBytesView = useCallback((ciphertextId) => {
+    const latestNodes = nodesRef.current ?? nodes;
+    const latestEdges = edgesRef.current ?? edges;
+    setAesViewPayload({
+      nodes: latestNodes,
+      edges: latestEdges,
+      ciphertextId,
+      initialRound: aesStepsLastRound,
+    });
+    setShowAesSubBytesView(true);
+  }, [nodes, edges, aesStepsLastRound]);
 
   /**
    * Encrypts an image using XOR operation with ECB or CBC mode.
@@ -251,15 +294,16 @@ export default function App() {
             ...n.data,
             showHandleLabels,
             onChange: (id, patch) => {
-              console.log('🔗 App.onChange triggered for node:', id, 'patch:', patch);
               setNodes((nds) => {
                 const next = nds.map((nn) =>
                   nn.id === id
                     ? { ...nn, data: { ...nn.data, ...patch } }
                     : nn
                 );
-                console.log('🔗 Calling computeGraphValues, mode:', m);
-                return computeGraphValues(next, preset.edges, m);
+                const result = computeGraphValues(next, preset.edges, m);
+                nodesRef.current = result;
+                edgesRef.current = preset.edges;
+                return result;
               });
             },
           },
@@ -278,7 +322,10 @@ export default function App() {
                 const next = nds.map((nn) =>
                   nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
                 );
-                return computeGraphValues(next, preset.edges, m);
+                const result = computeGraphValues(next, preset.edges, m);
+                nodesRef.current = result;
+                edgesRef.current = preset.edges;
+                return result;
               });
             },
             onRunCipher,
@@ -297,7 +344,10 @@ export default function App() {
                 const next = nds.map((nn) =>
                   nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
                 );
-                return computeGraphValues(next, preset.edges, m);
+                const result = computeGraphValues(next, preset.edges, m);
+                nodesRef.current = result;
+                edgesRef.current = preset.edges;
+                return result;
               });
             },
           },
@@ -317,9 +367,31 @@ export default function App() {
                 const next = nds.map((nn) =>
                   nn.id === id ? { ...nn, data: { ...nn.data, ...patch } } : nn
                 );
-                return computeGraphValues(next, preset.edges, m);
+                const result = computeGraphValues(next, preset.edges, m);
+                nodesRef.current = result;
+                edgesRef.current = preset.edges;
+                return result;
               });
             },
+          },
+        };
+      }
+
+      if (n.type === "ciphertext") {
+        const edgeIn = preset.edges.find((e) => e.target === n.id);
+        const blockId = edgeIn?.source;
+        const block = preset.nodes.find((nd) => nd.id === blockId);
+        const ptNode = getPlaintextNodeForCiphertext(preset.nodes, preset.edges, n.id);
+        const isDecryptMode = !!ptNode?.data?.isDecryptMode;
+        const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
+        return {
+          ...n,
+          draggable: false,
+          data: {
+            ...n.data,
+            showHandleLabels,
+            showAesSteps: !!showAesSteps,
+            ...(showAesSteps ? { onOpenAesSubBytes: openAesSubBytesView } : {}),
           },
         };
       }
@@ -333,7 +405,7 @@ export default function App() {
     setNodes(computeGraphValues(withHandlers, preset.edges, m));
     setEdges(preset.edges);
   },
-  [setNodes, setEdges, onRunCipher, showHandleLabels]
+  [setNodes, setEdges, onRunCipher, showHandleLabels, openAesSubBytesView]
 );
 
 
@@ -422,6 +494,7 @@ export default function App() {
         id,
         type,
         position,
+        ...(type === "ciphertext" ? { draggable: false } : {}),
         data:
           type === "plaintext" || type === "key"
             ? { ...dataBase, value: "", bits: "" }
@@ -459,13 +532,32 @@ export default function App() {
       onNodesChange(changes);
       setNodes((nds) => {
         const updated = computeGraphValues(nds, edges, mode);
-        // Inject mode into all nodes' data
-        return updated.map(n => ({
-          ...n,
-          data: { ...n.data, mode, showHandleLabels }
-        }));
+        const result = updated.map((n) => {
+          if (n.type !== "ciphertext") {
+            return { ...n, data: { ...n.data, mode, showHandleLabels } };
+          }
+          const edgeIn = edges.find((e) => e.target === n.id);
+          const blockId = edgeIn?.source;
+          const block = updated.find((nd) => nd.id === blockId);
+          const ptNode = getPlaintextNodeForCiphertext(updated, edges, n.id);
+          const isDecryptMode = !!ptNode?.data?.isDecryptMode;
+          const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
+          return {
+            ...n,
+            ...(n.type === "ciphertext" ? { draggable: false } : {}),
+            data: {
+              ...n.data,
+              mode,
+              showHandleLabels,
+              showAesSteps: !!showAesSteps,
+              ...(showAesSteps ? { onOpenAesSubBytes: openAesSubBytesView } : {}),
+            },
+          };
+        });
+        nodesRef.current = result;
+        edgesRef.current = edges;
+        return result;
       });
-
     },
     [onNodesChange, edges, mode]
   );
@@ -479,15 +571,48 @@ export default function App() {
       onEdgesChange(changes);
       setNodes((nds) => {
         const updated = computeGraphValues(nds, edges, mode);
-        // Inject mode into all nodes' data
-        return updated.map(n => ({
-          ...n,
-          data: { ...n.data, mode, showHandleLabels }
-        }));
+        const result = updated.map((n) => {
+          if (n.type !== "ciphertext") {
+            return { ...n, data: { ...n.data, mode, showHandleLabels } };
+          }
+          const edgeIn = edges.find((e) => e.target === n.id);
+          const blockId = edgeIn?.source;
+          const block = updated.find((nd) => nd.id === blockId);
+          const ptNode = getPlaintextNodeForCiphertext(updated, edges, n.id);
+          const isDecryptMode = !!ptNode?.data?.isDecryptMode;
+          const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
+          return {
+            ...n,
+            ...(n.type === "ciphertext" ? { draggable: false } : {}),
+            data: {
+              ...n.data,
+              mode,
+              showHandleLabels,
+              showAesSteps: !!showAesSteps,
+              ...(showAesSteps ? { onOpenAesSubBytes: openAesSubBytesView } : {}),
+            },
+          };
+        });
+        nodesRef.current = result;
+        edgesRef.current = edges;
+        return result;
       });
     },
     [onEdgesChange, edges, mode]
   );
+
+  if (showAesSubBytesView) {
+    return (
+      <SubBytesView
+        payload={aesViewPayload}
+        onClose={(lastRound) => {
+          setShowAesSubBytesView(false);
+          setAesViewPayload(null);
+          if (typeof lastRound === "number") setAesStepsLastRound(lastRound);
+        }}
+      />
+    );
+  }
 
   return (
     <div

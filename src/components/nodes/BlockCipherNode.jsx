@@ -7,15 +7,15 @@ function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
   const showLabels = !!data?.showHandleLabels;
 
-  const [cipherType, setCipherType] = useState(data.cipherType || "xor");
+  const [cipherType, setCipherType] = useState(
+    data.cipherType === "des" ? "xor" : (data.cipherType || "xor")
+  );
 
   console.log("🔹 BlockCipherNode render, id:", id, "data.inputType:", data.inputType, "data.plaintextFile:", !!data.plaintextFile, "data.encryptedImageFile:", !!data.encryptedImageFile);
 
   // Auto-update cipherType when PlaintextNode sends it (e.g., when loading encrypted file)
   useEffect(() => {
-    if (data.cipherType && data.cipherType !== cipherType) {
-      console.log("🔄 BlockCipherNode: cipherType updated from", cipherType, "to", data.cipherType);
-      console.log("   data keys:", Object.keys(data));
+    if (data.cipherType && data.cipherType !== "des" && data.cipherType !== cipherType) {
       setCipherType(data.cipherType);
     }
   }, [data.cipherType]);
@@ -33,23 +33,6 @@ function BlockCipherNode({ id, data }) {
   //   console.log("BlockCipherNode select changed to:", v, "node id:", id);
   //   data.onChange?.(id, { cipherType: v });
   // };
-
-
-  const effectiveCipherType = data.cipherType || "xor";
-
-  const keyLabel =
-    effectiveCipherType === "aes"
-      ? "AES key"
-      : effectiveCipherType === "des"
-      ? "DES key (8 chars)"
-      : "XOR key";
-
-  const keyPlaceholder =
-    effectiveCipherType === "aes"
-      ? "passphrase"
-      : effectiveCipherType === "des"
-      ? "8 characters"
-      : "";
 
 
   return (
@@ -132,7 +115,6 @@ function BlockCipherNode({ id, data }) {
       >
         <option value="xor">XOR</option>
         <option value="aes">AES</option>
-        <option value="des">DES</option>
       </select>
 
       {/* Run button for image/file mode or when plaintextFile/encryptedImageFile exist */}

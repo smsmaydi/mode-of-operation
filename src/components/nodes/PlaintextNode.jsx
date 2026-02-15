@@ -1,68 +1,108 @@
-import React, { useState, useRef, useLayoutEffect, useCallback, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Handle, Position, useReactFlow } from "reactflow";
 import { fileToPixelBytes } from "../crypto/imageToBytes";
 import { checkModeForDeleteButton } from "../../utils/nodeHelpers";
+
+function textToHex(str) {
+  if (typeof str !== "string") return "";
+  return Array.from(str)
+    .map((c) => (c.charCodeAt(0) & 0xff).toString(16).toUpperCase().padStart(2, "0"))
+    .join(" ");
+}
+
+function hexToText(hexStr) {
+  if (typeof hexStr !== "string") return "";
+  const cleaned = hexStr.replace(/\s/g, "").replace(/[^0-9a-fA-F]/g, "");
+  const bytes = [];
+  for (let i = 0; i + 2 <= cleaned.length; i += 2) {
+    bytes.push(parseInt(cleaned.slice(i, i + 2), 16));
+  }
+  return String.fromCharCode(...bytes);
+}
+
+/** Hex string (any length) → bit string. */
+function encryptedHexToBits(hexStr) {
+  const cleaned = String(hexStr || "").replace(/\s/g, "").replace(/[^0-9a-fA-F]/g, "");
+  let out = "";
+  for (let i = 0; i + 2 <= cleaned.length; i += 2) {
+    const byte = parseInt(cleaned.slice(i, i + 2), 16);
+    out += byte.toString(2).padStart(8, "0");
+  }
+  return out;
+}
+
+/** Bit string → hex string (no spaces, for value). */
+function encryptedBitsToHex(bitsStr) {
+  const cleaned = String(bitsStr || "").replace(/\s/g, "").replace(/[^01]/g, "");
+  const padded = cleaned.length % 8 ? cleaned.padEnd(cleaned.length + (8 - (cleaned.length % 8)), "0") : cleaned;
+  const out = [];
+  for (let i = 0; i < padded.length; i += 8) {
+    const byte = padded.slice(i, i + 8);
+    out.push(parseInt(byte || "0", 2).toString(16).toUpperCase().padStart(2, "0"));
+  }
+  return out.join("");
+}
 
 function PlaintextNode({ id, data }) {
   const instance = useReactFlow();
   const showLabels = !!data?.showHandleLabels;
   const [inputType, setInputType] = useState(data?.inputType || "text");
   const [text, setText] = useState(data?.inputType === "text" ? (data?.value || "") : "");
-  const [bits, setBits] = useState(data?.inputType === "bits" ? (data?.value || "") : "");
+  const [hex, setHex] = useState(
+    data?.inputType === "text" && data?.value
+      ? textToHex(data.value)
+      : data?.inputType === "bits" && data?.value
+      ? (data.value.match(/.{1,4}/g) || []).map((nibble) => parseInt(nibble, 2).toString(16).toUpperCase().padStart(1, "0")).join(" ")
+      : ""
+  );
   const [file, setFile] = useState(null);
   const [isDecryptMode, setIsDecryptMode] = useState(false);
-  const [encryptedText, setEncryptedText] = useState("");
-  const taRef = useRef(null);
 
-  // Sync state when preset data changes (e.g., when mode changes)
+  // Sync from external data (e.g. preset/mode change)
   useEffect(() => {
     if (data?.inputType !== inputType) {
       setInputType(data?.inputType || "text");
-      if (data?.inputType === "text") {
-        setText(data?.value || "");
-        setBits("");
-      } else if (data?.inputType === "bits") {
-        setBits(data?.value || "");
-        setText("");
-      }
+    }
+    if (data?.inputType === "text" && data?.value !== undefined && data.value !== text) {
+      setText(data.value);
+      setHex(textToHex(data.value));
+    } else if (data?.inputType === "bits" && data?.value !== undefined) {
+      const bits = String(data.value).replace(/[^01]/g, "");
+      const padded = bits.length % 8 ? bits + "0".repeat(8 - (bits.length % 8)) : bits;
+      const hexFromBits = (padded.match(/.{8}/g) || [])
+        .map((b) => parseInt(b, 2).toString(16).toUpperCase().padStart(2, "0"))
+        .join(" ");
+      setHex(hexFromBits);
+      setText(hexToText(hexFromBits.replace(/\s/g, "")));
     }
   }, [data?.inputType, data?.value]);
 
-
-
   const onTextChange = (e) => {
-      const rawValue = e.target.value;
-      console.log('📝 PlaintextNode.onTextChange called with:', rawValue);
-
-      setInputType("text");
-
-      const formatted = formatBlocks(rawValue, 16);
-
-      setText(formatted);
-      setBits("");
-      setFile(null);
-
-      console.log('📝 Calling onChange with formatted value:', formatted);
-      data.onChange?.(id, {
-        inputType: "text",
-        value: formatted,
-        bits: "",
-        file: null,
-      });
+    const rawValue = e.target.value;
+    setInputType("text");
+    setText(rawValue);
+    setHex(textToHex(rawValue));
+    setFile(null);
+    data.onChange?.(id, {
+      inputType: "text",
+      value: rawValue,
+      bits: "",
+      file: null,
+    });
   };
 
-  const onBitsChange = (e) => {
-    const cleaned = (e.target.value || "").replace(/[^01]/g, ""); // only 0 and 1
-    setInputType("bits");
-    setBits(cleaned);         // state update
-    setText("");
+  const onHexChange = (e) => {
+    const rawHex = e.target.value;
+    setInputType("text");
+    setHex(rawHex);
+    const derivedText = hexToText(rawHex);
+    setText(derivedText);
     setFile(null);
-
-    data.onChange?.(id, { 
-      inputType: "bits", 
-      value: cleaned, 
-      text: "",    
-      file: null     
+    data.onChange?.(id, {
+      inputType: "text",
+      value: derivedText,
+      bits: "",
+      file: null,
     });
   };
 
@@ -73,7 +113,7 @@ function PlaintextNode({ id, data }) {
     setInputType("image");
     setFile(file);
     setText("");
-    setBits("");
+    setHex("");
 
     const pixelBytes = await fileToPixelBytes(file, {
       width: 256,
@@ -99,7 +139,7 @@ function PlaintextNode({ id, data }) {
     setInputType("encryptedFile");
     setFile(file);
     setText("");
-    setBits("");
+    setHex("");
 
     const updateData = {
       inputType: "encryptedFile",
@@ -121,23 +161,6 @@ function PlaintextNode({ id, data }) {
     // Store File object with proper property names for App.js
     data.onChange?.(id, updateData);
   };
-
-  useLayoutEffect(() => {
-    // Disabled auto-resize to prevent ResizeObserver loop
-    // Textareas now have fixed height
-  }, [text, inputType]);
-
-
-  const formatBlocks = (str, blockSize = 16) => {
-    const raw = (str || "").replace(/\n/g, ""); // delete old line breaks
-    let out = "";
-    for (let i = 0; i < raw.length; i += blockSize) {
-      out += raw.slice(i, i + blockSize) + "\n";
-    }
-    return out.replace(/\n$/, ""); // remove last newLine
-  };
-
-
 
   return (
     <div
@@ -184,7 +207,7 @@ function PlaintextNode({ id, data }) {
                 // Switching to encrypt mode - clear decrypt-related state
                 setInputType("text");
                 setFile(null);
-                setEncryptedText("");
+                setHex("");
                 
                 // Clear all downstream nodes (BlockCipher and Ciphertext)
                 const allNodes = instance.getNodes();
@@ -249,7 +272,7 @@ function PlaintextNode({ id, data }) {
                 // Switching to decrypt mode
                 setInputType("encrypted");
                 setText("");
-                setBits("");
+                setHex("");
                 setFile(null);
               }
               
@@ -298,85 +321,129 @@ function PlaintextNode({ id, data }) {
       <div style={{ marginTop: 8 }}>
         {!isDecryptMode ? (
           <>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Text:</div>
+              <textarea
+                style={{
+                  width: "100%",
+                  height: 72,
+                  lineHeight: 1.4,
+                  padding: 6,
+                  resize: "none",
+                  overflow: "auto",
+                  border: "1px solid #999",
+                  borderRadius: 4,
+                  fontFamily: "monospace",
+                  boxSizing: "border-box",
+                }}
+                placeholder="Metin yazın..."
+                value={text}
+                onChange={onTextChange}
+                className="nodrag"
+              />
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Hex:</div>
+              <textarea
+                style={{
+                  width: "100%",
+                  height: 56,
+                  lineHeight: 1.4,
+                  padding: 6,
+                  resize: "none",
+                  overflow: "auto",
+                  border: "1px solid #999",
+                  borderRadius: 4,
+                  fontFamily: "monospace",
+                  boxSizing: "border-box",
+                }}
+                placeholder="Hex (Text ile senkron)"
+                value={hex}
+                onChange={onHexChange}
+                className="nodrag"
+              />
+            </div>
             <div>
-              <textarea style={{ width: '80%', height: 80, lineHeight:1.4, padding:5, resize:'none' , overflow:'auto', border: '1px solid #999', borderRadius:4, fontFamily:'monospace' }}
-                placeholder="Text..." 
-                value={inputType === "text" ? text : ""} 
-                onChange={onTextChange} 
-                className="nodrag"
-              />
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <input 
-                placeholder="Bits..." 
-                value={inputType === "bits" ? bits : ""} 
-                onChange={onBitsChange} 
-                className="nodrag"
-              />
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
-                Image file (encrypt)
-              </div>
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={onFileChange}
-                className="nodrag" 
-              />
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Img: (dosya girişi)</div>
+              <input type="file" accept="image/*" onChange={onFileChange} className="nodrag" />
               <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
-                Use this for original images.
+                Resim şifrelemek için dosya seçin.
               </div>
             </div>
           </>
         ) : (
           <div>
-            {/* Encrypted Text Paste Area */}
-            <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
-              Encrypted Text (paste)
-            </div>
-            <textarea 
-              value={encryptedText}
+            {/* Decrypt: Hex (top) and Bits (bottom), synced like IV */}
+            <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Hex:</div>
+            <textarea
+              value={data?.inputType === "encrypted" && typeof data?.value === "string"
+                ? (data.value.replace(/(.{2})/g, "$1 ").trim())
+                : ""}
               onChange={(e) => {
-                const val = e.target.value;
-                setEncryptedText(val);
-                // Update parent with encrypted text
+                const raw = e.target.value;
+                const cleaned = raw.replace(/\s/g, "").replace(/[^0-9a-fA-F]/g, "");
                 data.onChange?.(id, {
                   inputType: "encrypted",
-                  value: val,
+                  value: cleaned,
                   isDecryptMode: true,
                 });
               }}
-              placeholder="Paste encrypted text here..."
+              placeholder="Şifreli hex (örn. A1 B2 C3...)"
               style={{
-                width: "95%",
-                padding: 5,
-                fontSize: 11,
+                width: "100%",
+                height: 48,
+                padding: 4,
+                fontSize: 10,
                 fontFamily: "monospace",
                 resize: "none",
-                height: 80,
-                overflow: "auto",
                 border: "1px solid #999",
                 borderRadius: 4,
-                marginBottom: 8
+                boxSizing: "border-box",
+              }}
+              className="nodrag"
+            />
+            <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4, marginTop: 6 }}>Bits:</div>
+            <textarea
+              value={data?.inputType === "encrypted" && typeof data?.value === "string"
+                ? encryptedHexToBits(data.value)
+                : ""}
+              onChange={(e) => {
+                const raw = (e.target.value || "").replace(/[^01]/g, "");
+                const hexValue = encryptedBitsToHex(raw);
+                data.onChange?.(id, {
+                  inputType: "encrypted",
+                  value: hexValue,
+                  isDecryptMode: true,
+                });
+              }}
+              placeholder="0 ve 1 (şifreli bitler)"
+              style={{
+                width: "100%",
+                height: 48,
+                padding: 4,
+                fontSize: 10,
+                fontFamily: "monospace",
+                resize: "none",
+                border: "1px solid #999",
+                borderRadius: 4,
+                boxSizing: "border-box",
               }}
               className="nodrag"
             />
 
             {/* Encrypted File Upload */}
-            <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2 }}>
+            <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 2, marginTop: 8 }}>
               Encrypted File (decrypt)
             </div>
-            <input 
-              type="file" 
+            <input
+              type="file"
               accept="*"
               onChange={onEncryptedFileChange}
-              className="nodrag" 
+              className="nodrag"
             />
             <div style={{ fontSize: 11, color: "#444", marginTop: 2, marginBottom: 8 }}>
               Upload encrypted file (.enc, .bin, or binary)
             </div>
-
           </div>
         )}
       </div>
@@ -397,11 +464,10 @@ function PlaintextNode({ id, data }) {
 }
 
 export default React.memo(PlaintextNode, (prevProps, nextProps) => {
-  // Re-render only if id or specific data properties change, not position
-  return prevProps.id === nextProps.id && 
-         JSON.stringify(prevProps.data?.inputType) === JSON.stringify(nextProps.data?.inputType) &&
-         JSON.stringify(prevProps.data?.value) === JSON.stringify(nextProps.data?.value) &&
-         JSON.stringify(prevProps.data?.bits) === JSON.stringify(nextProps.data?.bits) &&
-         JSON.stringify(prevProps.data?.mode) === JSON.stringify(nextProps.data?.mode) &&
-         JSON.stringify(prevProps.data?.showHandleLabels) === JSON.stringify(nextProps.data?.showHandleLabels);
+  return prevProps.id === nextProps.id &&
+         prevProps.data?.inputType === nextProps.data?.inputType &&
+         prevProps.data?.value === nextProps.data?.value &&
+         prevProps.data?.mode === nextProps.data?.mode &&
+         prevProps.data?.showHandleLabels === nextProps.data?.showHandleLabels &&
+         prevProps.data?.isDecryptMode === nextProps.data?.isDecryptMode;
 });
