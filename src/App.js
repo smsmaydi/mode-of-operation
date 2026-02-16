@@ -120,7 +120,7 @@ export default function App() {
 
   /**
    * Main cipher execution handler.
-   * Routes to the appropriate cipher (XOR, AES, or DES) based on the block's settings.
+   * Routes to the appropriate cipher (XOR or AES) based on the block's settings.
    * Supports both image and text encryption modes.
    */
   const onRunCipher = useCallback(

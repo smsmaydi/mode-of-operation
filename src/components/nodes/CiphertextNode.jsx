@@ -171,7 +171,7 @@ function CiphertextNode({ id, data }) {
                   {copyBinaryText}
                 </button>
               )}
-              {(cipherType === "aes" || cipherType === "des") && data?.fullBinary && (
+              {cipherType === "aes" && data?.fullBinary && (
                 <button
                   onClick={handleCopyEnc}
                   className="nodrag"

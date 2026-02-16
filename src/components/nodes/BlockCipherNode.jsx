@@ -7,15 +7,13 @@ function BlockCipherNode({ id, data }) {
   const instance = useReactFlow();
   const showLabels = !!data?.showHandleLabels;
 
-  const [cipherType, setCipherType] = useState(
-    data.cipherType === "des" ? "xor" : (data.cipherType || "xor")
-  );
+  const [cipherType, setCipherType] = useState(data.cipherType || "xor");
 
   console.log("🔹 BlockCipherNode render, id:", id, "data.inputType:", data.inputType, "data.plaintextFile:", !!data.plaintextFile, "data.encryptedImageFile:", !!data.encryptedImageFile);
 
   // Auto-update cipherType when PlaintextNode sends it (e.g., when loading encrypted file)
   useEffect(() => {
-    if (data.cipherType && data.cipherType !== "des" && data.cipherType !== cipherType) {
+    if (data.cipherType && data.cipherType !== cipherType) {
       setCipherType(data.cipherType);
     }
   }, [data.cipherType]);

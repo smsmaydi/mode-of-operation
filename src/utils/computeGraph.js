@@ -82,48 +82,6 @@ function encryptBitsWithAES(bits, keyPassphrase) {
   }
 }
 
-// Encrypt plaintext bits with DES (per byte) - using simple XOR simulation
-// Note: CryptoJS doesn't have DES, so we'll use TripleDES
-function encryptBitsWithDES(bits, keyString) {
-  try {
-    if (!bits || !keyString) return null;
-    
-    // Convert bits to text (8 bits = 1 char)
-    const plaintext = binaryToText(bits);
-    if (!plaintext) return null;
-    
-    // Convert binary key to UTF-8 string if needed (8 bytes = 64 bits)
-    let keyForDes = keyString;
-    if (/^[01]+$/.test(keyString) && keyString.length === 64) {
-      // Convert 64 bits to 8 characters
-      keyForDes = "";
-      for (let i = 0; i < 8; i++) {
-        const byte = keyString.slice(i * 8, i * 8 + 8);
-        keyForDes += String.fromCharCode(parseInt(byte, 2));
-      }
-      console.log("  DES: Key converted from binary (64 bits) to 8-character string");
-    }
-    
-    if (keyForDes.length !== 8) {
-      console.log("  ❌ DES requires exactly 8-character key, got:", keyForDes.length);
-      return null;
-    }
-    
-    // For DES simulation with CryptoJS TripleDES (since DES not available)
-    // We'll use TripleDES with key repeated
-    const key = CryptoJS.enc.Utf8.parse(keyForDes);
-    const encrypted = CryptoJS.TripleDES.encrypt(plaintext, key, {
-      mode: CryptoJS.mode.ECB,
-      padding: CryptoJS.pad.Pkcs7
-    });
-    const encryptedHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex).toUpperCase();
-    return encryptedHex;
-  } catch (e) {
-    console.error("DES encryption error:", e);
-    return null;
-  }
-}
-
 // Decrypt AES encrypted data with passphrase
 function decryptBitsWithAES(encryptedData, keyPassphrase) {
   try {
@@ -176,53 +134,6 @@ function decryptBitsWithAES(encryptedData, keyPassphrase) {
     return textToBinary(plaintextStr);
   } catch (e) {
     console.error("AES decryption error:", e);
-    return null;
-  }
-}
-
-// Decrypt DES encrypted data with 8-character key
-function decryptBitsWithDES(encryptedData, keyString) {
-  try {
-    if (!encryptedData || !keyString) return null;
-    
-    // Convert binary key to UTF-8 string if needed (8 bytes = 64 bits)
-    let keyForDes = keyString;
-    if (/^[01]+$/.test(keyString) && keyString.length === 64) {
-      // Convert 64 bits to 8 characters
-      keyForDes = "";
-      for (let i = 0; i < 8; i++) {
-        const byte = keyString.slice(i * 8, i * 8 + 8);
-        keyForDes += String.fromCharCode(parseInt(byte, 2));
-      }
-      console.log("  DES: Key converted from binary (64 bits) to 8-character string");
-    }
-    
-    if (keyForDes.length !== 8) {
-      console.log("  ❌ DES requires exactly 8-character key, got:", keyForDes.length);
-      return null;
-    }
-    
-    const key = CryptoJS.enc.Utf8.parse(keyForDes);
-
-    const isHexEncrypted = /^[0-9a-fA-F]+$/.test(encryptedData);
-    const cipherParams = isHexEncrypted
-      ? CryptoJS.lib.CipherParams.create({
-          ciphertext: CryptoJS.enc.Hex.parse(encryptedData)
-        })
-      : encryptedData;
-
-    const decrypted = CryptoJS.TripleDES.decrypt(cipherParams, key, {
-      mode: CryptoJS.mode.ECB,
-      padding: CryptoJS.pad.Pkcs7
-    });
-    const plaintextStr = decrypted.toString(CryptoJS.enc.Utf8);
-    
-    if (!plaintextStr) return null;
-    
-    // Convert back to bits
-    return textToBinary(plaintextStr);
-  } catch (e) {
-    console.error("DES decryption error:", e);
     return null;
   }
 }
@@ -435,9 +346,6 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
         if (cipherType === "aes") {
           // AES: use keyText (passphrase), not bits
           kVal = keyMapEntry.keyText || keyMapEntry.bits || keyMapEntry.value;
-        } else if (cipherType === "des") {
-          // DES: use keyText (8 chars), not bits
-          kVal = keyMapEntry.keyText || keyMapEntry.bits || keyMapEntry.value;
         } else {
           // XOR: use bits
           kVal = keyMapEntry.bits || keyMapEntry.value;
@@ -491,13 +399,6 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           const encryptedHex = encryptBitsWithAES(nonceCounter, kVal);
           if (!encryptedHex) {
             n.data = { ...n.data, error: "AES-CTR keystream failed", preview: undefined };
-            return;
-          }
-          keystreamBits = hexToBits(encryptedHex);
-        } else if (cipherType === "des") {
-          const encryptedHex = encryptBitsWithDES(nonceCounter, kVal);
-          if (!encryptedHex) {
-            n.data = { ...n.data, error: "DES-CTR keystream failed", preview: undefined };
             return;
           }
           keystreamBits = hexToBits(encryptedHex);
@@ -630,15 +531,12 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
         if (cipherType === "aes") {
           console.log("    🔓 Decrypting with AES, key:", kVal?.slice(0, 16) + "...");
           decryptedBits = decryptBitsWithAES(pVal, kVal);
-        } else if (cipherType === "des") {
-          console.log("    🔓 Decrypting with DES, key:", kVal?.slice(0, 8));
-          decryptedBits = decryptBitsWithDES(pVal, kVal);
         } else {
-          console.log("    ⚠️ Decrypt mode works with AES/DES only, not XOR");
+          console.log("    ⚠️ Decrypt mode works with AES only, not XOR");
           n.data = {
             ...n.data,
-            error: "Decrypt mode requires AES or DES",
-            preview: "Use AES or DES for decrypt",
+            error: "Decrypt mode requires AES",
+            preview: "Use AES for decrypt",
           };
           return;
         }
@@ -707,7 +605,7 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
         //
         // Real-world AES/DES Implementation (via CryptoJS):
         //   - These use the ENTIRE key in their key schedule
-        //   - Plaintext is automatically padded to block size (128 bits for AES, 64 bits for DES)
+        //   - Plaintext is automatically padded to block size (128 bits for AES)
         //   - All key bits participate in round transformations
         //   - More secure: key reuse doesn't weaken security per block
         //
@@ -849,54 +747,6 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
             }
           });
         }
-      } else if (cipherType === "des") {
-        // DES encryption per byte
-        const encrypted = encryptBitsWithDES(pVal, kVal);
-        
-        if (!encrypted || kVal.length !== 8) {
-          const keyStatus = kVal && kVal.length !== 8 ? `❌ Key must be 8 chars (${kVal.length} given)` : "❌ Encryption error";
-          previewTxt = `DES\nKey: ${kVal?.slice(0, 8) || "waiting..."}...\n${keyStatus}`;
-          n.data = { ...n.data, error: keyStatus, preview: previewTxt };
-        } else {
-          // Show encrypted result
-          const plaintextDisplay = binaryToText(pVal) || "?";
-          previewTxt = `DES\nPlain: "${plaintextDisplay}"\nEnc: ${encrypted}`;
-          
-          n.data = {
-            ...n.data,
-            error: undefined,
-            preview: previewTxt,
-            encryptedDisplay: encrypted,
-            fullBinary: encrypted,
-            cipherType,
-            lastPlaintext: pVal,
-            lastKey: kVal,
-            lastCipherType: cipherType,
-          };
-
-          valueMap.set(n.id, { type: "bits", value: encrypted });
-
-          const outgoingEdges = edges.filter(
-            (e) =>
-              e.source === n.id &&
-              e.sourceHandle === "out" &&
-              e.targetHandle === "in"
-          );
-
-          outgoingEdges.forEach((e) => {
-            const tIdx = nodes.findIndex((nd) => nd.id === e.target);
-            if (tIdx !== -1) {
-              nodes[tIdx] = {
-                ...nodes[tIdx],
-                data: {
-                  ...nodes[tIdx].data,
-                  result: previewTxt,
-                  fullBinary: encrypted,
-                },
-              };
-            }
-          });
-        }
       }
     }
   });
@@ -914,14 +764,9 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       const keyMapEntry = kEdge ? valueMap.get(kEdge.source) : null;
       const cipherType = n.data?.cipherType || "aes";
 
-      let kVal = null;
-      if (keyMapEntry) {
-        if (cipherType === "aes") {
-          kVal = keyMapEntry.keyText || keyMapEntry.value;
-        } else if (cipherType === "des") {
-          kVal = keyMapEntry.keyText || keyMapEntry.value;
-        }
-      }
+      const kVal = keyMapEntry
+        ? (keyMapEntry.keyText || keyMapEntry.bits || keyMapEntry.value)
+        : null;
 
       if (!encVal || !kVal) {
         console.log("  ❌ Missing encrypted data or key");
@@ -977,51 +822,6 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
             }
           });
         }
-      } else if (cipherType === "des") {
-        if (kVal.length !== 8) {
-          previewTxt = `DES Decrypt\n❌ Key must be 8 chars (${kVal.length} given)`;
-          n.data = { ...n.data, error: "Invalid DES key length", preview: previewTxt };
-        } else {
-          decrypted = decryptBitsWithDES(encVal, kVal);
-
-          if (!decrypted) {
-            previewTxt = `DES Decrypt\n❌ Decryption failed\nKey: ${kVal?.slice(0, 8) || "?"}...`;
-            n.data = { ...n.data, error: "DES decryption failed", preview: previewTxt };
-          } else {
-            const decryptedText = binaryToText(decrypted) || "?";
-            previewTxt = `DES Decrypt\nDecrypted: "${decryptedText}"\nBits: ${decrypted.slice(0, 32)}...\nKey: ${kVal?.slice(0, 8) || "?"}...`;
-
-            n.data = {
-              ...n.data,
-              error: undefined,
-              preview: previewTxt,
-              fullBinary: decrypted,
-            };
-
-            valueMap.set(n.id, { type: "bits", value: decrypted });
-
-            const outgoingEdges = edges.filter(
-              (e) =>
-                e.source === n.id &&
-                e.sourceHandle === "out" &&
-                e.targetHandle === "in"
-            );
-
-            outgoingEdges.forEach((e) => {
-              const tIdx = nodes.findIndex((nd) => nd.id === e.target);
-              if (tIdx !== -1) {
-                nodes[tIdx] = {
-                  ...nodes[tIdx],
-                  data: {
-                    ...nodes[tIdx].data,
-                    result: previewTxt,
-                    fullBinary: decrypted,
-                  },
-                };
-              }
-            });
-          }
-        }
       }
     }
   });
@@ -1067,7 +867,7 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           // XOR the two inputs
           const xorResult = xorBits(ptVal, pcVal);
           if (!xorResult.error) {
-            const ctrHex = (ctrCipher === "aes" || ctrCipher === "des")
+            const ctrHex = ctrCipher === "aes"
               ? bitsToHex(xorResult.value).toUpperCase()
               : null;
             valueMap.set(n.id, { type: "bits", value: xorResult.value });

@@ -75,7 +75,6 @@ export default function DecryptNode({ id, data }) {
         }}
       >
         <option value="aes">AES</option>
-        <option value="des">DES</option>
       </select>
 
       {data.preview && (
