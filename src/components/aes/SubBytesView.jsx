@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { motion, AnimatePresence } from "motion/react";
 import CryptoJS from "crypto-js";
 import { AES_SBOX, subByte, byteToSBoxCoord } from "../../utils/aesSBox";

@@ -17,13 +17,13 @@ export default function NodePalette() {
   );
 
   return (
-    <aside style={{ width: 220, borderLeft: '1px solid #ddd', background: '#fafafa', padding: 10 }}>
+    <aside style={{ width: 200, borderLeft: '1px solid #ddd', background: '#fafafa', padding: 10 }}>
       <div style={{ fontWeight: 700, marginBottom: 8 }}>Palette</div>
       <Item label="Plaintext" type="plaintext" />
       <Item label="Key"       type="key" />
       <Item label="BlockCipher" type="blockcipher" />
       <Item label="Ciphertext"  type="ciphertext" />
-      <Item label="Decrypt"     type="decrypt" />
+      <Item label="XOR"     type="xor" />
       <Item label="IV"          type="iv" />
       <Item label="Nonce+Counter" type="ctr" />
       <div style={{ fontSize: 12, color: '#666' }}>
