@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { motion, AnimatePresence } from "motion/react";
 import CryptoJS from "crypto-js";
 import { AES_SBOX, subByte, byteToSBoxCoord } from "../../utils/aesSBox";
 import { getAesViewDataFromGraph } from "../../utils/aesViewData";
@@ -735,7 +734,7 @@ function SubBytesView({ payload, onClose }) {
         }}
       >
         <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600 }}>
-          AES — Round {activeRound + 1} of 10
+          AES{derived?.isCtr ? " (CTR)" : ""} — Round {activeRound + 1} of 10
           {derived ? (
             <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.7)", marginLeft: 10 }}>
               (using graph data)
@@ -835,7 +834,7 @@ function SubBytesView({ payload, onClose }) {
           1. AddRoundKey (K{activeRound})
         </h2>
         <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16, maxWidth: 720 }}>
-          State is XORed with Round Key {activeRound + 1}. 4×4 grid is <strong>column-major</strong>. Input state is {activeRound === 0 ? "plaintext" : "output of previous round MixColumns"}.
+          State is XORed with Round Key {activeRound + 1}. 4×4 grid is <strong>column-major</strong>. Input state is {derived?.isCtr ? (activeRound === 0 ? "counter block (nonce ‖ counter)" : "output of previous round MixColumns") : (activeRound === 0 ? "plaintext" : "output of previous round MixColumns")}.
         </p>
         <div
           style={{
@@ -847,7 +846,7 @@ function SubBytesView({ payload, onClose }) {
           }}
         >
           <AddRoundKeyGrid title={`Round Key ${activeRound + 1} (K${activeRound})`} values={currentRoundKey} cursor={arkCursor} phase={arkPhase} highlightKey cellSize={CELL_SIZE_STATE} />
-          <AddRoundKeyGrid title={activeRound === 0 ? "State (plaintext)" : "State (after previous MixColumns)"} values={currentRoundInputState} cursor={arkCursor} phase={arkPhase} highlightState cellSize={CELL_SIZE_STATE} />
+          <AddRoundKeyGrid title={derived?.isCtr ? (activeRound === 0 ? "Counter block (nonce ‖ counter)" : "State (after previous MixColumns)") : (activeRound === 0 ? "State (plaintext)" : "State (after previous MixColumns)")} values={currentRoundInputState} cursor={arkCursor} phase={arkPhase} highlightState cellSize={CELL_SIZE_STATE} />
           <AddRoundKeyGrid title="State ⊕ Round Key (output)" values={addRoundKeyOutput} cursor={arkCursor} phase={arkPhase} isOutput cellSize={CELL_SIZE_STATE} />
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
@@ -1071,10 +1070,12 @@ function SubBytesView({ payload, onClose }) {
           )}
 
           <h2 style={{ fontSize: 16, margin: rk10Detail ? "24px 0 8px" : "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-            5. Final AddRoundKey (K10) → Ciphertext
+            5. Final AddRoundKey (K10) → {derived?.isCtr ? "Keystream" : "Ciphertext"}
           </h2>
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16 }}>
-            Last round has no MixColumns. State after Shift Rows is XORed with K10 (from step 4) to produce the ciphertext.
+            {derived?.isCtr
+              ? "Last round has no MixColumns. State after Shift Rows is XORed with K10 to produce the keystream block (plaintext ⊕ keystream = ciphertext in CTR)."
+              : "Last round has no MixColumns. State after Shift Rows is XORed with K10 (from step 4) to produce the ciphertext."}
           </p>
           <div
             style={{
@@ -1096,37 +1097,47 @@ function SubBytesView({ payload, onClose }) {
               cellSize={CELL_SIZE_STATE}
             />
             <ShiftRowsStaticGrid
-              title="Ciphertext"
+              title={derived?.isCtr ? "Keystream" : "Ciphertext"}
               values={roundOutputs[9].ciphertext}
               cellSize={CELL_SIZE_STATE}
             />
           </div>
-          {/* Verification: compare Steps ciphertext with CryptoJS first block (same as Enc node) */}
+          {/* Verification: ECB/CBC = ciphertext; CTR = keystream (AES(counter block)) */}
           {initialState?.length === 16 && roundKey?.length === 16 && (() => {
             const keyHex = roundKey.map((b) => b.toString(16).padStart(2, "0")).join("");
-            const plaintextStr = (typeof derived?.plaintextString === "string" && derived.plaintextString.length > 0)
-              ? derived.plaintextString
-              : String.fromCharCode(...initialState);
             let expectedFirstBlockHex = "";
             try {
               const key = CryptoJS.enc.Hex.parse(keyHex);
-              if (derived?.isCbc && derived?.ivBytes?.length === 16) {
-                const ivHex = derived.ivBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-                const iv = CryptoJS.enc.Hex.parse(ivHex);
-                const encrypted = CryptoJS.AES.encrypt(plaintextStr, key, {
-                  mode: CryptoJS.mode.CBC,
-                  iv,
-                  padding: CryptoJS.pad.Pkcs7,
-                });
-                const fullHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
-                expectedFirstBlockHex = fullHex.slice(0, 32);
-              } else {
-                const encrypted = CryptoJS.AES.encrypt(plaintextStr, key, {
+              if (derived?.isCtr) {
+                const counterBlockHex = initialState.map((b) => b.toString(16).padStart(2, "0")).join("");
+                const counterWords = CryptoJS.enc.Hex.parse(counterBlockHex);
+                const encrypted = CryptoJS.AES.encrypt(counterWords, key, {
                   mode: CryptoJS.mode.ECB,
-                  padding: CryptoJS.pad.Pkcs7,
+                  padding: CryptoJS.pad.NoPadding,
                 });
-                const fullHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
-                expectedFirstBlockHex = fullHex.slice(0, 32);
+                expectedFirstBlockHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex).slice(0, 32);
+              } else {
+                const plaintextStr = (typeof derived?.plaintextString === "string" && derived.plaintextString.length > 0)
+                  ? derived.plaintextString
+                  : String.fromCharCode(...initialState);
+                if (derived?.isCbc && derived?.ivBytes?.length === 16) {
+                  const ivHex = derived.ivBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+                  const iv = CryptoJS.enc.Hex.parse(ivHex);
+                  const encrypted = CryptoJS.AES.encrypt(plaintextStr, key, {
+                    mode: CryptoJS.mode.CBC,
+                    iv,
+                    padding: CryptoJS.pad.Pkcs7,
+                  });
+                  const fullHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
+                  expectedFirstBlockHex = fullHex.slice(0, 32);
+                } else {
+                  const encrypted = CryptoJS.AES.encrypt(plaintextStr, key, {
+                    mode: CryptoJS.mode.ECB,
+                    padding: CryptoJS.pad.Pkcs7,
+                  });
+                  const fullHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
+                  expectedFirstBlockHex = fullHex.slice(0, 32);
+                }
               }
             } catch (e) {
               expectedFirstBlockHex = "(error)";
@@ -1135,7 +1146,9 @@ function SubBytesView({ payload, onClose }) {
             const match = stepsHex.toLowerCase() === expectedFirstBlockHex.toLowerCase();
             return (
               <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 8, fontSize: 12 }}>
-                <div style={{ color: "rgba(255,255,255,0.9)", marginBottom: 6 }}>Verification (first block = Enc node){derived?.isCbc ? " — CBC" : ""}</div>
+                <div style={{ color: "rgba(255,255,255,0.9)", marginBottom: 6 }}>
+                  Verification {derived?.isCtr ? "— CTR: Steps keystream vs CryptoJS AES(counter block)" : derived?.isCbc ? "(first block = Enc node) — CBC" : "(first block = Enc node)"}
+                </div>
                 <div style={{ color: "rgba(255,255,255,0.7)", fontFamily: "monospace", wordBreak: "break-all" }}>
                   Steps: {stepsHex}
                 </div>
@@ -1143,7 +1156,7 @@ function SubBytesView({ payload, onClose }) {
                   Expected (CryptoJS): {expectedFirstBlockHex}
                 </div>
                 <div style={{ marginTop: 6, color: match ? "#7dd87d" : "#f08" }}>
-                  {match ? "✓ Match" : "✗ Mismatch — check key/plaintext format or AES steps"}
+                  {match ? "✓ Match" : derived?.isCtr ? "✗ Mismatch — check counter block/key or AES steps" : "✗ Mismatch — check key/plaintext format or AES steps"}
                 </div>
               </div>
             );

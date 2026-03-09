@@ -119,9 +119,54 @@ export function getAesViewDataFromGraph(nodes, edges, ciphertextId) {
     console.log("[aesViewData] EXIT null: no edge to ciphertext");
     return null;
   }
-  const blockId = edgeToCipher.source;
-  const blockNode = nodes.find((n) => n.id === blockId);
-  console.log("[aesViewData] blockNode", blockId, blockNode ? { type: blockNode.type, hasData: !!blockNode.data, keyBits: blockNode.data?.keyBits?.slice?.(0, 32), keyText: blockNode.data?.keyText?.slice?.(0, 32) } : null);
+  const sourceId = edgeToCipher.source;
+  const sourceNode = nodes.find((n) => n.id === sourceId);
+
+  // ——— CTR: Ciphertext ← XOR ← BlockCipher ← Key, BlockCipher ← Ctr ———
+  if (sourceNode?.type === "xor") {
+    const xorNodeId = sourceId;
+    const pcEdge = edges.find((e2) => e2.target === xorNodeId && (e2.targetHandle === "pc" || e2.targetHandle === "pcTop"));
+    if (!pcEdge) {
+      console.log("[aesViewData] EXIT null: CTR XOR has no pc edge");
+      return null;
+    }
+    const blockId = pcEdge.source;
+    const blockNode = nodes.find((n) => n.id === blockId);
+    if (!blockNode || blockNode.type !== "blockcipher" || (blockNode.data?.cipherType || "").toLowerCase() !== "aes") {
+      console.log("[aesViewData] EXIT null: CTR pc source not AES blockcipher");
+      return null;
+    }
+    const ctrEdge = edges.find((e) => e.target === blockId && e.targetHandle === "ctr");
+    const ctrNode = ctrEdge ? nodes.find((n) => n.id === ctrEdge.source) : null;
+    if (!ctrNode || ctrNode.type !== "ctr") {
+      console.log("[aesViewData] EXIT null: CTR block has no ctr node");
+      return null;
+    }
+    const nonceBits = ctrNode.data?.nonceBits ?? "";
+    const counterBits = ctrNode.data?.counterBits ?? "";
+    const nonceCounter = String(nonceBits).replace(/\s/g, "") + String(counterBits).replace(/\s/g, "");
+    if (nonceCounter.length < 128) {
+      console.log("[aesViewData] EXIT null: CTR nonce+counter < 128 bits");
+      return null;
+    }
+    const stateBytes = bitsTo16Bytes(nonceCounter.slice(0, 128));
+    const keyEdge = edges.find((e) => e.target === blockId && e.targetHandle === "key");
+    const keyNode = keyEdge ? nodes.find((n) => n.id === keyEdge.source) : null;
+    let keyBytes = keyNode ? keyTo16Bytes(keyNode.data) : null;
+    if (!keyBytes && blockNode.data && (blockNode.data.keyBits || blockNode.data.keyText)) {
+      keyBytes = keyTo16Bytes({ keyText: blockNode.data.keyBits || blockNode.data.keyText });
+    }
+    if (!keyBytes) {
+      console.log("[aesViewData] EXIT null: CTR key missing");
+      return null;
+    }
+    console.log("[aesViewData] EXIT OK (CTR)", { stateBytesLen: stateBytes.length, keyBytesLen: keyBytes.length });
+    return { stateBytes, keyBytes, isCtr: true };
+  }
+
+  // ——— ECB/CBC: Ciphertext ← BlockCipher ———
+  const blockId = sourceId;
+  const blockNode = sourceNode;
   if (!blockNode || blockNode.type !== "blockcipher") {
     console.log("[aesViewData] EXIT null: block not found or not blockcipher");
     return null;
@@ -166,11 +211,11 @@ export function getAesViewDataFromGraph(nodes, edges, ciphertextId) {
     }
   }
 
-  // First block input to AES: for CBC with text plaintext use same as CryptoJS (UTF-8 + PKCS7 first 16 bytes then XOR IV)
+  // First block input to AES: must match CryptoJS (UTF-8 + PKCS7 first 16 bytes for text) for both ECB and CBC verification
   let firstBlockBytes;
-  if (isCbc && ivBytes && ivBytes.length === 16 && typeof plaintextString === "string") {
+  if (typeof plaintextString === "string" && plaintextString.length >= 0) {
     firstBlockBytes = stringToUtf8Pkcs7FirstBlock(plaintextString);
-    console.log("[aesViewData] CBC text: first block (PKCS7)", firstBlockBytes.slice(0, 6));
+    console.log("[aesViewData] text: first block (PKCS7, matches CryptoJS)", firstBlockBytes.slice(0, 6));
   } else {
     firstBlockBytes = plaintextNode ? plaintextTo16Bytes(plaintextNode.data) : null;
   }

@@ -65,6 +65,21 @@ function getPlaintextNodeForCiphertext(nodes, edges, ciphertextId) {
   return nodes.find((n) => n.id === edgeToXor.source);
 }
 
+/** Block whose AES steps we show for this ciphertext. ECB/CBC: block = direct source; CTR: block = source of XOR's pc (keystream). */
+function getBlockForCiphertext(nodes, edges, ciphertextId, mode) {
+  const edgeToCipher = edges.find((e) => e.target === ciphertextId);
+  if (!edgeToCipher) return null;
+  const sourceId = edgeToCipher.source;
+  const sourceNode = nodes.find((n) => n.id === sourceId);
+  if (sourceNode?.type === "blockcipher") return sourceNode;
+  if (mode === "ctr" && sourceNode?.type === "xor") {
+    const pcEdge = edges.find((e2) => e2.target === sourceId && (e2.targetHandle === "pc" || e2.targetHandle === "pcTop"));
+    if (!pcEdge) return null;
+    const block = nodes.find((n) => n.id === pcEdge.source);
+    return block?.type === "blockcipher" ? block : null;
+  }
+  return null;
+}
 
 export default function App() {
   const [mode, setMode] = useState("ecb");
@@ -378,9 +393,7 @@ export default function App() {
       }
 
       if (n.type === "ciphertext") {
-        const edgeIn = preset.edges.find((e) => e.target === n.id);
-        const blockId = edgeIn?.source;
-        const block = preset.nodes.find((nd) => nd.id === blockId);
+        const block = getBlockForCiphertext(preset.nodes, preset.edges, n.id, m);
         const ptNode = getPlaintextNodeForCiphertext(preset.nodes, preset.edges, n.id);
         const isDecryptMode = !!ptNode?.data?.isDecryptMode;
         const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
@@ -536,9 +549,7 @@ export default function App() {
           if (n.type !== "ciphertext") {
             return { ...n, data: { ...n.data, mode, showHandleLabels } };
           }
-          const edgeIn = edges.find((e) => e.target === n.id);
-          const blockId = edgeIn?.source;
-          const block = updated.find((nd) => nd.id === blockId);
+          const block = getBlockForCiphertext(updated, edges, n.id, mode);
           const ptNode = getPlaintextNodeForCiphertext(updated, edges, n.id);
           const isDecryptMode = !!ptNode?.data?.isDecryptMode;
           const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
@@ -575,9 +586,7 @@ export default function App() {
           if (n.type !== "ciphertext") {
             return { ...n, data: { ...n.data, mode, showHandleLabels } };
           }
-          const edgeIn = edges.find((e) => e.target === n.id);
-          const blockId = edgeIn?.source;
-          const block = updated.find((nd) => nd.id === blockId);
+          const block = getBlockForCiphertext(updated, edges, n.id, mode);
           const ptNode = getPlaintextNodeForCiphertext(updated, edges, n.id);
           const isDecryptMode = !!ptNode?.data?.isDecryptMode;
           const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
