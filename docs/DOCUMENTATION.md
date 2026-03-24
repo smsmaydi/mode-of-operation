@@ -428,4 +428,5 @@ computeGraph.js
 
 - **Image mode:** When image/encryptedFile is selected in PlaintextNode, processing is done via `cipherHandlers`; the **Run** button must be clicked.
 - **Bit/text mode:** `computeGraphValues` runs automatically on edge changes and node changes.
+- **AES steps button:** The SubBytes / AES step-by-step button on the Ciphertext node is **not shown** when Plaintext is **image** or **encrypted file** (any ECB/CBC/CTR mode), because that visualization targets bit/text flows only.
 - **computeGraph.js** is still ~1000 lines; it can be split similarly to `cipherHandlers` in the future.

@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { xorImageFileWithKey } from '../utils/computeGraph';
+import { xorImageFileWithKey } from "../utils/xorImageFile";
 
 export default function TestImageXor() {
   const [key, setKey] = useState('01010101');
-  const [file, setFile] = useState(null);     // yüklenen resim
-  const [outUrl, setOutUrl] = useState(null); // çıktı resmi
+  const [file, setFile] = useState(null); // uploaded image
+  const [outUrl, setOutUrl] = useState(null); // output image URL
 
   const onFileChange = (e) => {
     const f = e.target.files?.[0];
     if (f) {
       setFile(f);
-      setOutUrl(null); // yeni resim seçilince eski çıktıyı temizle
+      setOutUrl(null); // clear previous output when a new image is selected
     }
   };
 
@@ -40,7 +40,7 @@ export default function TestImageXor() {
           type="text"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="Key bits (örn. 01010101)"
+          placeholder="Key bits (e.g. 01010101)"
           style={{ flex: 1 }}
         />
         <button onClick={runXor}>Run XOR</button>
@@ -60,7 +60,7 @@ export default function TestImageXor() {
             alt="cipher"
             style={{ maxWidth: '300px', border: '1px solid #ccc' }}
           />
-          <p><a href={outUrl} download="xor.png">İndir</a></p>
+          <p><a href={outUrl} download="xor.png">Download</a></p>
         </div>
       )}
     </div>

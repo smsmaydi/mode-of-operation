@@ -11,7 +11,7 @@ export default function PlaintextNode({ data }) {
         onChange={(e) => data.onChange?.(data.id, { text: e.target.value })}
         placeholder="Enter plaintext"
       />
-      {/* Altta çıkış */}
+      {/* Output handle at bottom */}
       <Handle type="source" position={Position.Bottom} id="out" />
     </div>
   );

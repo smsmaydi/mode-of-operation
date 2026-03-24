@@ -4,7 +4,7 @@ const modes = [
   { id: 'ecb', label: 'ECB' },
   { id: 'cbc', label: 'CBC' },
   { id: 'ctr', label: 'Counter Mode' },
-  { id: 'free', label: 'Free Mode' },
+  //{ id: 'free', label: 'Free Mode' },
 ];
 
 export default function ModeMenu({ current, onSelect, showHandleLabels, onToggleHandleLabels, isDarkTheme, onToggleDarkTheme }) {

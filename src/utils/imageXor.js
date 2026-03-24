@@ -2,7 +2,7 @@
 
 // src/utils/imageXor.js
 
-// bit string → Uint8Array (ör. "01010101" → [85])
+// bit string → Uint8Array (e.g. "01010101" → [85])
 export function bitStringToBytes(bits) {
   const cleaned = (bits || '').replace(/[^01]/g, '');
   if (!cleaned) return new Uint8Array(0);

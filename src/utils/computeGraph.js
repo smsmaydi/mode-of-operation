@@ -996,7 +996,7 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       const char =
         charCode >= 32 && charCode <= 126
           ? String.fromCharCode(charCode)
-          : "."; // printable değilse nokta
+          : "."; // non-printable → dot
 
       lines.push(`${byte}  ${char}`);
     }

@@ -336,7 +336,7 @@ function PlaintextNode({ id, data }) {
                   fontFamily: "monospace",
                   boxSizing: "border-box",
                 }}
-                placeholder="Metin yazın..."
+                placeholder="Enter text..."
                 value={text}
                 onChange={onTextChange}
                 className="nodrag"
@@ -357,17 +357,17 @@ function PlaintextNode({ id, data }) {
                   fontFamily: "monospace",
                   boxSizing: "border-box",
                 }}
-                placeholder="Hex (Text ile senkron)"
+                placeholder="Hex (synced with Text)"
                 value={hex}
                 onChange={onHexChange}
                 className="nodrag"
               />
             </div>
             <div>
-              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Img: (dosya girişi)</div>
+              <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Image (file input)</div>
               <input type="file" accept="image/*" onChange={onFileChange} className="nodrag" />
               <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
-                Resim şifrelemek için dosya seçin.
+                Select an image file to encrypt.
               </div>
             </div>
           </>
@@ -388,7 +388,7 @@ function PlaintextNode({ id, data }) {
                   isDecryptMode: true,
                 });
               }}
-              placeholder="Şifreli hex (örn. A1 B2 C3...)"
+              placeholder="Encrypted hex (e.g. A1 B2 C3...)"
               style={{
                 width: "100%",
                 height: 48,
@@ -416,7 +416,7 @@ function PlaintextNode({ id, data }) {
                   isDecryptMode: true,
                 });
               }}
-              placeholder="0 ve 1 (şifreli bitler)"
+              placeholder="0 and 1 (encrypted bits)"
               style={{
                 width: "100%",
                 height: 48,

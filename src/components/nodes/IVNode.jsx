@@ -114,7 +114,7 @@ function IVNode({ id, data }) {
         <textarea
           value={bits}
           onChange={onBitsChange}
-          placeholder="0 ve 1 (128 bit)"
+          placeholder="0 and 1 (128 bits)"
           style={{
             width: '100%',
             minHeight: 60,

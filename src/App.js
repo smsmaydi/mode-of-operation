@@ -65,6 +65,12 @@ function getPlaintextNodeForCiphertext(nodes, edges, ciphertextId) {
   return nodes.find((n) => n.id === edgeToXor.source);
 }
 
+/** True when Plaintext is image upload or encrypted file (Run-based flow; hide AES step-by-step view). */
+function isPlaintextImageOrFileMode(ptNode) {
+  const t = ptNode?.data?.inputType;
+  return t === "image" || t === "encryptedFile";
+}
+
 /** Block whose AES steps we show for this ciphertext. ECB/CBC: block = direct source; CTR: block = source of XOR's pc (keystream). */
 function getBlockForCiphertext(nodes, edges, ciphertextId, mode) {
   const edgeToCipher = edges.find((e) => e.target === ciphertextId);
@@ -216,7 +222,7 @@ export default function App() {
         const bytes = await fileToPixelBytes(pt.data.value, { width: 256, height: 256 });
         console.log("Pixel bytes:", bytes);
 
-        // Key: senin KEY DATA'nda bits var -> text değil
+        // Key node stores binary key bits (not text)
         const keyBits = keyN.data?.bits || "";
         const clean = keyBits.replace(/\s+/g, "");
         if (!/^[01]+$/.test(clean) || clean.length % 8 !== 0) { setFirst8Trace([]); return; }
@@ -396,7 +402,10 @@ export default function App() {
         const block = getBlockForCiphertext(preset.nodes, preset.edges, n.id, m);
         const ptNode = getPlaintextNodeForCiphertext(preset.nodes, preset.edges, n.id);
         const isDecryptMode = !!ptNode?.data?.isDecryptMode;
-        const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
+        const showAesSteps =
+          block?.data?.cipherType === "aes" &&
+          !isDecryptMode &&
+          !isPlaintextImageOrFileMode(ptNode);
         return {
           ...n,
           draggable: false,
@@ -552,7 +561,10 @@ export default function App() {
           const block = getBlockForCiphertext(updated, edges, n.id, mode);
           const ptNode = getPlaintextNodeForCiphertext(updated, edges, n.id);
           const isDecryptMode = !!ptNode?.data?.isDecryptMode;
-          const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
+          const showAesSteps =
+            block?.data?.cipherType === "aes" &&
+            !isDecryptMode &&
+            !isPlaintextImageOrFileMode(ptNode);
           return {
             ...n,
             ...(n.type === "ciphertext" ? { draggable: false } : {}),
@@ -589,7 +601,10 @@ export default function App() {
           const block = getBlockForCiphertext(updated, edges, n.id, mode);
           const ptNode = getPlaintextNodeForCiphertext(updated, edges, n.id);
           const isDecryptMode = !!ptNode?.data?.isDecryptMode;
-          const showAesSteps = block?.data?.cipherType === "aes" && !isDecryptMode;
+          const showAesSteps =
+            block?.data?.cipherType === "aes" &&
+            !isDecryptMode &&
+            !isPlaintextImageOrFileMode(ptNode);
           return {
             ...n,
             ...(n.type === "ciphertext" ? { draggable: false } : {}),

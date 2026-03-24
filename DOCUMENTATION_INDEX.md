@@ -4,7 +4,7 @@
 
 1. [GETTING_STARTED.md](GETTING_STARTED.md) — where to start
 2. [QUICK_REFERENCE.md](QUICK_REFERENCE.md) — one‑page cheat sheet
-3. [COMPREHENSIVE_CODE_GUIDE.md](COMPREHENSIVE_CODE_GUIDE.md) — full guide
+3. [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) — full project documentation
 4. [UML_DIAGRAMS.md](UML_DIAGRAMS.md) — diagrams
 5. [DATA_FLOW_REFERENCE.md](DATA_FLOW_REFERENCE.md) — `node.data` reference
 
@@ -28,9 +28,9 @@ Read [DATA_FLOW_REFERENCE.md](DATA_FLOW_REFERENCE.md).
 
 ## Key Cross‑References
 
-- `computeGraphValues()` → [COMPREHENSIVE_CODE_GUIDE.md](COMPREHENSIVE_CODE_GUIDE.md) + [UML_DIAGRAMS.md](UML_DIAGRAMS.md)
+- `computeGraphValues()` → [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) + [UML_DIAGRAMS.md](UML_DIAGRAMS.md) + `src/utils/computeGraph.js`
 - `node.data` fields → [DATA_FLOW_REFERENCE.md](DATA_FLOW_REFERENCE.md)
-- Connection rules → [COMPREHENSIVE_CODE_GUIDE.md](COMPREHENSIVE_CODE_GUIDE.md)
+- Connection rules → `src/utils/validators.js` + [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)
 
 ### React Patterns
 - useCallback, useMemo
