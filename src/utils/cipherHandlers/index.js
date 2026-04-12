@@ -1,6 +1,7 @@
 import { runXorHandler } from "./xorHandler";
 import { runAesImageHandler } from "./aesHandler";
 import { bitsToHex } from "./bitsToHex";
+import { computeGraphValues } from "../computeGraph";
 
 export { bitsToHex, runXorHandler };
 
@@ -52,8 +53,11 @@ export function runCipherHandler({ blockId, edges, mode, setNodes, onRunXor }) {
     const isEncryptedInput = plaintextIsEncrypted;
 
     if (cipherType === "xor") {
-      onRunXor(blockId, currentNodes, edges, mode);
-      return currentNodes;
+      if (isImageMode) {
+        void onRunXor(blockId, currentNodes, edges, mode);
+        return currentNodes;
+      }
+      return computeGraphValues(currentNodes, edges, mode);
     }
 
     if (cipherType === "aes" && isImageMode) {

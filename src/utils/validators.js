@@ -10,6 +10,12 @@ function baseRules(params, nodes) {
     return true;
   }
 
+  // PlaintextChunk(out) -> BlockCipher(plaintext) — ECB / multi-column
+  if (src.type === 'plaintextchunk' && params.sourceHandle === 'out' &&
+      tgt.type === 'blockcipher' && params.targetHandle === 'plaintext') {
+    return true;
+  }
+
   // Key(out) -> BlockCipher(key)
   if (src.type === 'key' && params.sourceHandle === 'out' &&
       tgt.type === 'blockcipher' && params.targetHandle === 'key') {
@@ -93,6 +99,15 @@ export function makeIsValidConnection(mode) {
       (params.targetHandle === "pt" || params.targetHandle === "ptLeft")
     ) return true;
 
+    // PlaintextChunk -> XOR.pt
+    if (
+      mode === "cbc" &&
+      sourceNode?.type === "plaintextchunk" &&
+      targetNode?.type === "xor" &&
+      params.sourceHandle === "out" &&
+      (params.targetHandle === "pt" || params.targetHandle === "ptLeft")
+    ) return true;
+
     // IV -> XOR.pc
     if (
       mode === "cbc" &&
@@ -129,12 +144,30 @@ export function makeIsValidConnection(mode) {
       params.targetHandle === "ctr"
     ) return true;
 
+    // CTR snap (in-cluster mirror) -> BlockCipher.ctr
+    if (
+      mode === "ctr" &&
+      sourceNode?.type === "ctrsnap" &&
+      targetNode?.type === "blockcipher" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "ctr"
+    ) return true;
+
     // Plaintext -> XOR.pt (CTR)
     if (
       mode === "ctr" &&
       sourceNode?.type === "plaintext" &&
       targetNode?.type === "xor" &&
       (params.sourceHandle === "out" || params.sourceHandle === "outRight") &&
+      (params.targetHandle === "pt" || params.targetHandle === "ptLeft")
+    ) return true;
+
+    // PlaintextChunk -> XOR.pt (CTR pipeline)
+    if (
+      mode === "ctr" &&
+      sourceNode?.type === "plaintextchunk" &&
+      targetNode?.type === "xor" &&
+      params.sourceHandle === "out" &&
       (params.targetHandle === "pt" || params.targetHandle === "ptLeft")
     ) return true;
 
@@ -156,14 +189,22 @@ export function makeIsValidConnection(mode) {
       params.targetHandle === "in"
     ) return true;
 
-    // Plaintext -> BlockCipher (all modes)
+    // Plaintext / chunk -> BlockCipher (all modes)
     if (
-      sourceNode?.type === "plaintext" &&
+      (sourceNode?.type === "plaintext" || sourceNode?.type === "plaintextchunk") &&
       targetNode?.type === "blockcipher" &&
       params.targetHandle === "plaintext"
     ) return true;
 
-    // Key -> BlockCipher (all modes)
+    // KeySnap -> BlockCipher.key
+    if (
+      sourceNode?.type === "keysnap" &&
+      targetNode?.type === "blockcipher" &&
+      params.sourceHandle === "out" &&
+      params.targetHandle === "key"
+    ) return true;
+
+    // Key -> BlockCipher (all modes) — direct link still allowed (e.g. free / CTR without keysnap)
     if (
       sourceNode?.type === "key" &&
       targetNode?.type === "blockcipher" &&

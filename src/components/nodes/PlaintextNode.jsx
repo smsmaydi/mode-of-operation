@@ -166,10 +166,11 @@ function PlaintextNode({ id, data }) {
     <div
       style={{
         padding: 10,
-        border: "1px solid #666",
-        borderRadius: 6,
-        background: "lightgreen",
-        minWidth: 220,
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--node-plaintext-bg)",
+        color: "var(--node-plaintext-text)",
+        minWidth: 196,
         position: "relative",
       }}
     >
@@ -183,7 +184,7 @@ function PlaintextNode({ id, data }) {
           border: "none",
           background: "transparent",
           cursor: "pointer",
-          color: "#b00",
+          color: "var(--danger)",
           fontWeight: "bold",
           display: checkModeForDeleteButton(data?.mode),
         }}
@@ -291,7 +292,7 @@ function PlaintextNode({ id, data }) {
               width: 50,
               height: 24,
               borderRadius: 12,
-              background: isDecryptMode ? "#4CAF50" : "#ccc",
+              background: isDecryptMode ? "var(--success)" : "var(--border)",
               position: "relative",
               transition: "background 0.3s ease",
               display: "flex",
@@ -304,7 +305,8 @@ function PlaintextNode({ id, data }) {
                 width: 20,
                 height: 20,
                 borderRadius: "50%",
-                background: "white",
+                background: "var(--node-field-bg)",
+                color: "var(--node-field-text)",
                 position: "absolute",
                 left: isDecryptMode ? 28 : 2,
                 transition: "left 0.3s ease",
@@ -331,7 +333,7 @@ function PlaintextNode({ id, data }) {
                   padding: 6,
                   resize: "none",
                   overflow: "auto",
-                  border: "1px solid #999",
+                  border: "1px solid var(--border)",
                   borderRadius: 4,
                   fontFamily: "monospace",
                   boxSizing: "border-box",
@@ -352,7 +354,7 @@ function PlaintextNode({ id, data }) {
                   padding: 6,
                   resize: "none",
                   overflow: "auto",
-                  border: "1px solid #999",
+                  border: "1px solid var(--border)",
                   borderRadius: 4,
                   fontFamily: "monospace",
                   boxSizing: "border-box",
@@ -366,7 +368,7 @@ function PlaintextNode({ id, data }) {
             <div>
               <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 4 }}>Image (file input)</div>
               <input type="file" accept="image/*" onChange={onFileChange} className="nodrag" />
-              <div style={{ fontSize: 11, color: "#444", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                 Select an image file to encrypt.
               </div>
             </div>
@@ -396,7 +398,7 @@ function PlaintextNode({ id, data }) {
                 fontSize: 10,
                 fontFamily: "monospace",
                 resize: "none",
-                border: "1px solid #999",
+                border: "1px solid var(--border)",
                 borderRadius: 4,
                 boxSizing: "border-box",
               }}
@@ -424,7 +426,7 @@ function PlaintextNode({ id, data }) {
                 fontSize: 10,
                 fontFamily: "monospace",
                 resize: "none",
-                border: "1px solid #999",
+                border: "1px solid var(--border)",
                 borderRadius: 4,
                 boxSizing: "border-box",
               }}
@@ -441,7 +443,7 @@ function PlaintextNode({ id, data }) {
               onChange={onEncryptedFileChange}
               className="nodrag"
             />
-            <div style={{ fontSize: 11, color: "#444", marginTop: 2, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, marginBottom: 8 }}>
               Upload encrypted file (.enc, .bin, or binary)
             </div>
           </div>
@@ -451,10 +453,10 @@ function PlaintextNode({ id, data }) {
       <Handle type="source" position={Position.Right} id="outRight" style={{ top: "50%" }} />
       {showLabels && (
         <>
-          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "#111" }}>
+          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "var(--text)" }}>
             out
           </div>
-          <div style={{ position: "absolute", top: "46%", right: -24, fontSize: 10, color: "#111" }}>
+          <div style={{ position: "absolute", top: "46%", right: -24, fontSize: 10, color: "var(--text)" }}>
             out
           </div>
         </>

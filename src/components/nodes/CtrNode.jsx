@@ -48,10 +48,11 @@ export default function CtrNode({ id, data }) {
     <div
       style={{
         padding: 10,
-        border: "1px solid #5a4ecb",
-        borderRadius: 6,
-        background: "#e6e4ff",
-        minWidth: 240,
+        border: "1px solid var(--edge-ctr-input)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--accent-soft)",
+        color: "var(--text)",
+        minWidth: 212,
         position: "relative",
       }}
     >
@@ -64,7 +65,7 @@ export default function CtrNode({ id, data }) {
           border: "none",
           background: "transparent",
           cursor: "pointer",
-          color: "#b00",
+          color: "var(--danger)",
           fontWeight: "bold",
           display: checkModeForDeleteButton(data?.mode),
         }}
@@ -89,8 +90,9 @@ export default function CtrNode({ id, data }) {
               padding: "3px 6px",
               fontSize: 10,
               borderRadius: 4,
-              border: "1px solid #999",
-              background: "white",
+              border: "1px solid var(--border)",
+              background: "var(--node-field-bg)",
+              color: "var(--node-field-text)",
               fontFamily: "monospace",
             }}
           />
@@ -104,8 +106,9 @@ export default function CtrNode({ id, data }) {
                 fontSize: 10,
                 cursor: "pointer",
                 borderRadius: 4,
-                border: "1px solid #999",
-                background: "#fff",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--node-action-btn-text)",
               }}
             >
               🎲 64
@@ -119,8 +122,9 @@ export default function CtrNode({ id, data }) {
                 fontSize: 10,
                 cursor: "pointer",
                 borderRadius: 4,
-                border: "1px solid #999",
-                background: "#fff",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--node-action-btn-text)",
               }}
             >
               🎲 128
@@ -143,9 +147,10 @@ export default function CtrNode({ id, data }) {
               padding: "3px 6px",
               fontSize: 10,
               borderRadius: 4,
-              border: "1px solid #999",
-              background: "#f8f8f8",
-              fontFamily: "monospace",
+              border: "1px solid var(--border)",
+              background: "var(--surface-hover)",
+              color: "var(--node-field-text)",
+              fontFamily: "var(--font-mono)",
             }}
           />
           <div style={{ marginTop: 4 }}>
@@ -158,8 +163,9 @@ export default function CtrNode({ id, data }) {
                 fontSize: 10,
                 cursor: "pointer",
                 borderRadius: 4,
-                border: "1px solid #999",
-                background: "#fff",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--node-action-btn-text)",
               }}
             >
               Reset to 0
@@ -168,9 +174,9 @@ export default function CtrNode({ id, data }) {
         </div>
       </div>
 
-      <Handle type="source" position={Position.Bottom} id="out" style={{ background: "#5a4ecb" }} />
+      <Handle type="source" position={Position.Bottom} id="out" style={{ background: "var(--edge-ctr-input)" }} />
       {showLabels && (
-        <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "#5a4ecb" }}>
+        <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "var(--edge-ctr-input)" }}>
           out
         </div>
       )}

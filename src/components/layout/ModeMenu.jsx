@@ -1,47 +1,44 @@
-import React from 'react';
+import React from "react";
 
 const modes = [
-  { id: 'ecb', label: 'ECB' },
-  { id: 'cbc', label: 'CBC' },
-  { id: 'ctr', label: 'Counter Mode' },
-  //{ id: 'free', label: 'Free Mode' },
+  { id: "ecb", label: "ECB" },
+  { id: "cbc", label: "CBC" },
+  { id: "ctr", label: "Counter Mode" },
 ];
 
-export default function ModeMenu({ current, onSelect, showHandleLabels, onToggleHandleLabels, isDarkTheme, onToggleDarkTheme }) {
+/**
+ * Top of the left column: operation-mode switches + handle-label toggle.
+ * Renders `children` below (typically `GraphInputsPanel`).
+ *
+ * @param {object} props
+ * @param {string} props.current — active mode id (`ecb` | `cbc` | `ctr`)
+ * @param {function(string): void} props.onSelect
+ * @param {boolean} [props.showHandleLabels]
+ * @param {function(boolean): void} [props.onToggleHandleLabels]
+ */
+export default function ModeMenu({
+  current,
+  onSelect,
+  showHandleLabels,
+  onToggleHandleLabels,
+  children,
+}) {
   return (
-    <aside style={{ 
-      width: 220, 
-      borderRight: '1px solid #ddd', 
-      background: isDarkTheme ? '#1e1e1e' : '#fafafa',
-      color: isDarkTheme ? '#fff' : '#000',
-      transition: 'background-color 0.3s ease'
-    }}>
-      <div style={{ padding: 12, fontWeight: 700 }}>Modes</div>
-      {modes.map(m => (
+    <aside className="mode-menu">
+      <div className="mode-menu__heading">Modes</div>
+      {modes.map((m) => (
         <button
           key={m.id}
+          type="button"
           onClick={() => onSelect(m.id)}
-          style={{
-            display: 'block',
-            width: '100%',
-            textAlign: 'left',
-            padding: '10px 12px',
-            border: 'none',
-            background: current === m.id ? (isDarkTheme ? '#364957' : '#e8f0fe') : 'transparent',
-            color: isDarkTheme ? '#fff' : '#000',
-            cursor: 'pointer',
-            fontWeight: current === m.id ? 700 : 300,
-            transition: 'background-color 0.2s ease'
-          }}
+          className={`mode-menu__btn${current === m.id ? " mode-menu__btn--active" : ""}`}
         >
           {m.label}
         </button>
       ))}
-      <div style={{ padding: 12, fontSize: 12, color: isDarkTheme ? '#888' : '#666' }}>
-        Click a mode.
-      </div>
-      <div style={{ padding: 12, borderTop: `1px solid ${isDarkTheme ? '#333' : '#eee'}` }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+      <div className="mode-menu__hint">Click a mode.</div>
+      <div className="mode-menu__section">
+        <label className="mode-menu__label">
           <input
             type="checkbox"
             checked={!!showHandleLabels}
@@ -50,16 +47,7 @@ export default function ModeMenu({ current, onSelect, showHandleLabels, onToggle
           Show input/output labels
         </label>
       </div>
-      <div style={{ padding: 12, borderTop: `1px solid ${isDarkTheme ? '#333' : '#eee'}` }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={!!isDarkTheme}
-            onChange={(e) => onToggleDarkTheme?.(e.target.checked)}
-          />
-          Dark theme 🌙
-        </label>
-      </div>
+      {children}
     </aside>
   );
 }

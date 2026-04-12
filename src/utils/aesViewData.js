@@ -3,6 +3,20 @@
  * then produce 16-byte state and 16-byte round key for AddRoundKey/SubBytes.
  */
 
+import { incrementCtrCounterBits64 } from "./computeGraph";
+
+/** BlockCipher `key` handle may connect to keysnap; resolve to master Key node for material. */
+function resolveKeyControlNode(nodes, edges, blockId) {
+  const keyEdge = edges.find((e) => e.target === blockId && e.targetHandle === "key");
+  if (!keyEdge) return null;
+  const n = nodes.find((x) => x.id === keyEdge.source);
+  if (n?.type === "keysnap") {
+    const sid = n.data?.sourceKeyId || "k1";
+    return nodes.find((x) => x.id === sid) || n;
+  }
+  return n;
+}
+
 function textToBinary(str) {
   if (typeof str !== "string") return "";
   return Array.from(str)
@@ -108,6 +122,9 @@ export function keyTo16Bytes(data) {
 export function getAesViewDataFromGraph(nodes, edges, ciphertextId) {
   console.log("[aesViewData] getAesViewDataFromGraph ENTER", { nodesCount: nodes?.length, edgesCount: edges?.length, ciphertextId });
 
+  const ciphertextBlockMatch = /^c-(\d+)$/.exec(String(ciphertextId || ""));
+  const ciphertextBlockIndex = ciphertextBlockMatch ? parseInt(ciphertextBlockMatch[1], 10) : 0;
+
   if (!nodes?.length || !edges?.length || !ciphertextId) {
     console.log("[aesViewData] EXIT null: missing nodes/edges/ciphertextId");
     return null;
@@ -137,21 +154,25 @@ export function getAesViewDataFromGraph(nodes, edges, ciphertextId) {
       return null;
     }
     const ctrEdge = edges.find((e) => e.target === blockId && e.targetHandle === "ctr");
-    const ctrNode = ctrEdge ? nodes.find((n) => n.id === ctrEdge.source) : null;
-    if (!ctrNode || ctrNode.type !== "ctr") {
-      console.log("[aesViewData] EXIT null: CTR block has no ctr node");
+    const ctrSource = ctrEdge ? nodes.find((n) => n.id === ctrEdge.source) : null;
+    const masterCtr =
+      ctrSource?.type === "ctrsnap"
+        ? nodes.find((n) => n.id === (ctrSource.data?.sourceCtrId || "ctr1"))
+        : ctrSource;
+    if (!masterCtr || masterCtr.type !== "ctr") {
+      console.log("[aesViewData] EXIT null: CTR block has no master ctr node");
       return null;
     }
-    const nonceBits = ctrNode.data?.nonceBits ?? "";
-    const counterBits = ctrNode.data?.counterBits ?? "";
+    const nonceBits = masterCtr.data?.nonceBits ?? "";
+    const counterBitsBase = masterCtr.data?.counterBits ?? "";
+    const counterBits = incrementCtrCounterBits64(counterBitsBase, ciphertextBlockIndex);
     const nonceCounter = String(nonceBits).replace(/\s/g, "") + String(counterBits).replace(/\s/g, "");
     if (nonceCounter.length < 128) {
       console.log("[aesViewData] EXIT null: CTR nonce+counter < 128 bits");
       return null;
     }
     const stateBytes = bitsTo16Bytes(nonceCounter.slice(0, 128));
-    const keyEdge = edges.find((e) => e.target === blockId && e.targetHandle === "key");
-    const keyNode = keyEdge ? nodes.find((n) => n.id === keyEdge.source) : null;
+    const keyNode = resolveKeyControlNode(nodes, edges, blockId);
     let keyBytes = keyNode ? keyTo16Bytes(keyNode.data) : null;
     if (!keyBytes && blockNode.data && (blockNode.data.keyBits || blockNode.data.keyText)) {
       keyBytes = keyTo16Bytes({ keyText: blockNode.data.keyBits || blockNode.data.keyText });
@@ -193,9 +214,8 @@ export function getAesViewDataFromGraph(nodes, edges, ciphertextId) {
       break;
     }
   }
-  const keyEdge = edges.find((e) => e.target === blockId && e.targetHandle === "key");
-  if (keyEdge) keyNode = nodes.find((n) => n.id === keyEdge.source);
-  console.log("[aesViewData] keyEdge", keyEdge ? keyEdge.source : null, "keyNode", keyNode?.id, keyNode?.data ? { hasBits: !!keyNode.data.bits, hasKeyText: !!keyNode.data.keyText, keyTextLen: keyNode.data.keyText?.length } : null);
+  keyNode = resolveKeyControlNode(nodes, edges, blockId);
+  console.log("[aesViewData] keyNode (resolved)", keyNode?.id, keyNode?.data ? { hasBits: !!keyNode.data.bits, hasKeyText: !!keyNode.data.keyText, keyTextLen: keyNode.data.keyText?.length } : null);
 
   const plaintextString = plaintextNode && (plaintextNode.data?.inputType === "text") ? (plaintextNode.data.value ?? plaintextNode.data.text ?? "") : null;
 
@@ -213,7 +233,10 @@ export function getAesViewDataFromGraph(nodes, edges, ciphertextId) {
 
   // First block input to AES: must match CryptoJS (UTF-8 + PKCS7 first 16 bytes for text) for both ECB and CBC verification
   let firstBlockBytes;
-  if (typeof plaintextString === "string" && plaintextString.length >= 0) {
+  if (plaintextNode?.type === "plaintextchunk") {
+    const bits = plaintextNode.data?.previewBits;
+    firstBlockBytes = bits && /^[01]+$/.test(bits) ? bitsTo16Bytes(bits) : null;
+  } else if (typeof plaintextString === "string" && plaintextString.length >= 0) {
     firstBlockBytes = stringToUtf8Pkcs7FirstBlock(plaintextString);
     console.log("[aesViewData] text: first block (PKCS7, matches CryptoJS)", firstBlockBytes.slice(0, 6));
   } else {

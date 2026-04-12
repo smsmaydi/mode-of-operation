@@ -37,7 +37,9 @@ export async function runXorHandler({
   }
 
   if (!fileInput || !keyBits) {
-    alert("Missing image or key/keystream!");
+    alert(
+      "Image mode: load an image in Plaintext and set a key, then Run.\nFor text or bits, encryption updates automatically — you do not need Run."
+    );
     return;
   }
 

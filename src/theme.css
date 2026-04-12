@@ -1,0 +1,266 @@
+/**
+ * Lecture deck theme tokens — all semantic colors and typography.
+ * Components use var(--token-name) only; hex/rgb values live here.
+ */
+
+:root {
+  /* —— Surfaces —— */
+  --bg: #ffffff;
+  --bg-muted: #f6f8fc;
+  --surface: #ffffff;
+  --surface-raised: #fafbfd;
+  --surface-hover: #eef2f9;
+  --surface-active: #e2e8f4;
+  --border: #d8dee8;
+  --border-subtle: #e8ecf4;
+
+  /* —— Text —— */
+  --text: #1a1f2e;
+  --text-muted: #5c6578;
+  --text-faint: #8b95a8;
+
+  /* —— Accents (academic / crypto slide deck) —— */
+  --accent-primary: #2c5282;
+  --accent-primary-hover: #234468;
+  --accent-secondary: #4a6fa5;
+  --accent-soft: #e8f0fc;
+  --accent-soft-hover: #dce8f8;
+  --on-accent: #ffffff;
+
+  --success: #2f7d4f;
+  --success-soft: #e6f4ec;
+  --danger: #b83232;
+  --danger-soft: #fceaea;
+
+  /* —— Chrome —— */
+  --gradient-open-aes: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  --shadow-sm: 0 1px 2px rgba(26, 31, 46, 0.06);
+  --shadow-md: 0 4px 14px rgba(26, 31, 46, 0.1);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-secondary);
+  --radius: 8px;
+  --radius-sm: 6px;
+
+  /* —— Graph edges (SVG stroke) —— deeper, fully opaque for contrast —— */
+  --edge-plaintext: #047857;
+  --edge-key: #1d4ed8;
+  --edge-ciphertext: #c2410c;
+  --edge-xor: #5b21b6;
+  --edge-iv: #b91c1c;
+  --edge-chain: #a21caf;
+  --edge-ctr-input: #0e7490;
+  --edge-xor-out: #86198f;
+  /* Plaintext / block (byte) → BlockCipher(plaintext); BlockCipher(out) → … */
+  --edge-chunk-to-block: #0369a1;
+  --edge-block-out: #b91c1c;
+
+  /* —— Step / highlight (pedagogy) —— */
+  --step-accent: #4f46e5;
+  --step-accent-soft: rgba(79, 70, 229, 0.14);
+  --step-accent-glow: rgba(79, 70, 229, 0.45);
+  --step-success: #16a34a;
+  --step-success-soft: rgba(22, 163, 74, 0.2);
+  --step-on-deck: #ffffff;
+
+  /* —— React Flow canvas —— */
+  --rf-canvas-bg: #f3f5f9;
+  /* Transparent so inner node content supplies the card; avoids square wrapper behind border-radius. */
+  --rf-node-bg: transparent;
+  --rf-node-border: #c5cdd9;
+  --rf-node-text: #1a1f2e;
+  --rf-handle: #7c8799;
+  --rf-handle-hover: #5c6578;
+  --rf-edge: #475569;
+  --rf-minimap-bg: #e8ecf4;
+  --rf-controls-bg: #ffffff;
+  --rf-controls-border: #d8dee8;
+  --rf-controls-button: #f0f3f8;
+  --rf-controls-button-hover: #e2e8f4;
+  --rf-controls-icon: #1a1f2e;
+  --rf-attribution: #8b95a8;
+
+  /* —— AES / SubBytes full-screen deck —— */
+  --aes-deck-gradient: linear-gradient(180deg, #fafbfd 0%, #f0f4fa 100%);
+  --aes-deck-text: #1a1f2e;
+  --aes-deck-text-muted: rgba(26, 31, 46, 0.72);
+  --aes-deck-text-faint: rgba(26, 31, 46, 0.55);
+  --aes-deck-border: rgba(26, 31, 46, 0.12);
+  --aes-deck-border-strong: rgba(26, 31, 46, 0.2);
+  --aes-deck-panel: rgba(255, 255, 255, 0.92);
+  --aes-deck-panel-deep: rgba(246, 248, 252, 0.95);
+  --aes-deck-shade: rgba(26, 31, 46, 0.05);
+  --aes-deck-shade-deep: rgba(26, 31, 46, 0.08);
+  --aes-deck-btn-ghost-bg: rgba(26, 31, 46, 0.06);
+  --aes-deck-btn-ghost-border: rgba(26, 31, 46, 0.18);
+  --aes-deck-round-active-border: var(--step-accent);
+  --aes-deck-round-active-bg: var(--step-accent-soft);
+  --aes-deck-cell-bg: rgba(26, 31, 46, 0.06);
+  --aes-deck-cell-highlight: var(--step-accent-glow);
+  --aes-deck-cell-highlight-bg: rgba(79, 70, 229, 0.22);
+  --aes-deck-cell-highlight-strong: rgba(79, 70, 229, 0.45);
+  --aes-deck-success-cell: rgba(22, 163, 74, 0.28);
+  --aes-deck-success-border: rgba(22, 163, 74, 0.75);
+  --aes-deck-primary-btn: var(--accent-primary);
+  --aes-deck-primary-btn-hover: var(--accent-primary-hover);
+  --aes-deck-match-ok: var(--success);
+  --aes-deck-match-bad: var(--danger);
+  --aes-deck-xor-strong: rgba(22, 163, 74, 0.9);
+
+  /* —— XOR node (graph) —— */
+  --xor-node-border: var(--border);
+  --xor-node-bg: #f5e6ff;
+  --xor-node-bg-error: var(--danger-soft);
+  --xor-node-label-a: #6b21a8;
+  --xor-node-label-b: #166534;
+  --xor-node-label-out: var(--text);
+  --xor-node-slot-bg: rgba(255, 255, 255, 0.45);
+  --xor-node-slot-result-bg: rgba(22, 163, 74, 0.15);
+  --xor-handle-pc: #7c3aed;
+  --xor-handle-pt: var(--success);
+  --node-iv-bg: #f8d4d4;
+  --node-iv-handle: var(--edge-iv);
+
+  /* —— Node inputs / ciphertext hex area (contrast on dark surfaces) —— */
+  --node-field-bg: #ffffff;
+  --node-field-text: #1a1f2e;
+  --node-chip-bg: #eef2f8;
+  --node-chip-text: #1a1f2e;
+  --node-chip-border: var(--border);
+  --node-action-btn-text: var(--text);
+  --node-blockcipher-bg: #ffd8a8;
+  --node-blockcipher-text: #1a1f2e;
+  --node-key-bg: #c5e3f6;
+  --node-key-text: #1a1f2e;
+  --node-plaintext-bg: #d4f4d4;
+  --node-plaintext-text: #1a1f2e;
+
+  /* —— Typography —— */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Monaco, Consolas, monospace;
+  --text-title-size: 1.35rem;
+  --text-title-weight: 700;
+  --text-subtitle-size: 1.05rem;
+  --text-subtitle-weight: 600;
+  --text-section-size: 0.95rem;
+  --text-section-weight: 600;
+  --text-body-size: 0.9375rem;
+  --text-body-weight: 400;
+  --text-caption-size: 0.8125rem;
+  --text-label-size: 0.75rem;
+  --line-height-tight: 1.25;
+  --line-height-body: 1.5;
+}
+
+html[data-theme="dark"] {
+  --bg: #12151c;
+  --bg-muted: #1a1f28;
+  --surface: #1e2430;
+  --surface-raised: #252b38;
+  --surface-hover: #2d3445;
+  --surface-active: #363d50;
+  --border: #3d4658;
+  --border-subtle: #2a3140;
+
+  --text: #e8eaf0;
+  --text-muted: #a8b0c4;
+  --text-faint: #7a8499;
+
+  --accent-primary: #6b9bd4;
+  --accent-primary-hover: #8ab0de;
+  --accent-secondary: #8faed9;
+  --accent-soft: #2a3548;
+  --accent-soft-hover: #323e54;
+  --on-accent: #12151c;
+
+  --success: #4ade80;
+  --success-soft: #1a3d2e;
+  --danger: #f87171;
+  --danger-soft: #3d2020;
+
+  --gradient-open-aes: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-secondary);
+
+  --edge-plaintext: #22c55e;
+  --edge-key: #3b82f6;
+  --edge-xor: #8b5cf6;
+  --edge-iv: #ef4444;
+  --edge-chain: #ec4899;
+  --edge-ctr-input: #06b6d4;
+  --edge-xor-out: #d946ef;
+  --edge-chunk-to-block: #0ea5e9;
+  --edge-block-out: #f43f5e;
+  --edge-ciphertext: #fb923c;
+
+  --step-accent: #818cf8;
+  --step-accent-soft: rgba(129, 140, 248, 0.22);
+  --step-accent-glow: rgba(129, 140, 248, 0.55);
+  --step-success: #4ade80;
+  --step-success-soft: rgba(74, 222, 128, 0.25);
+  --step-on-deck: #f1f5f9;
+
+  --rf-canvas-bg: #1a1f28;
+  --rf-node-bg: transparent;
+  --rf-node-border: #9aa3b2;
+  --rf-node-text: #1a1f2e;
+  --rf-handle: #6b7280;
+  --rf-handle-hover: #9ca3af;
+  --rf-edge: #94a3b8;
+  --rf-minimap-bg: #1a1f28;
+  --rf-controls-bg: #252b38;
+  --rf-controls-border: #3d4658;
+  --rf-controls-button: #2d3445;
+  --rf-controls-button-hover: #363d50;
+  --rf-controls-icon: #e8eaf0;
+  --rf-attribution: #7a8499;
+
+  --aes-deck-gradient: linear-gradient(180deg, #1a1f2e 0%, #151a28 100%);
+  --aes-deck-text: #e8eaf0;
+  --aes-deck-text-muted: rgba(232, 234, 240, 0.72);
+  --aes-deck-text-faint: rgba(232, 234, 240, 0.5);
+  --aes-deck-border: rgba(255, 255, 255, 0.12);
+  --aes-deck-border-strong: rgba(255, 255, 255, 0.22);
+  --aes-deck-panel: rgba(0, 0, 0, 0.22);
+  --aes-deck-panel-deep: rgba(0, 0, 0, 0.28);
+  --aes-deck-shade: rgba(0, 0, 0, 0.2);
+  --aes-deck-shade-deep: rgba(0, 0, 0, 0.28);
+  --aes-deck-btn-ghost-bg: rgba(255, 255, 255, 0.12);
+  --aes-deck-btn-ghost-border: rgba(255, 255, 255, 0.28);
+  --aes-deck-round-active-border: rgba(129, 140, 248, 0.9);
+  --aes-deck-round-active-bg: rgba(129, 140, 248, 0.28);
+  --aes-deck-cell-bg: rgba(255, 255, 255, 0.08);
+  --aes-deck-cell-highlight-bg: rgba(129, 140, 248, 0.4);
+  --aes-deck-cell-highlight-strong: rgba(129, 140, 248, 0.58);
+  --aes-deck-success-cell: rgba(74, 222, 128, 0.35);
+  --aes-deck-success-border: rgba(74, 222, 128, 0.8);
+  --aes-deck-primary-btn: rgba(129, 140, 248, 0.85);
+  --aes-deck-primary-btn-hover: rgba(165, 180, 252, 0.95);
+  --aes-deck-match-ok: #7dd87d;
+  --aes-deck-match-bad: #fb7185;
+  --aes-deck-xor-strong: rgba(74, 222, 128, 0.95);
+
+  --xor-node-bg: #4a3560;
+  --xor-node-border: #6b5a7a;
+  --xor-node-label-a: #d8b4fe;
+  --xor-node-label-b: #86efac;
+  --xor-node-label-out: #f1f5f9;
+  --xor-node-slot-bg: rgba(255, 255, 255, 0.12);
+  --xor-node-slot-result-bg: rgba(74, 222, 128, 0.18);
+  --xor-handle-pc: #c4b5fd;
+  --xor-handle-pt: #86efac;
+  --node-iv-bg: #5c2a2a;
+  --node-iv-handle: var(--edge-iv);
+
+  --node-field-bg: #2d3445;
+  --node-field-text: #f8fafc;
+  --node-chip-bg: #3d4658;
+  --node-chip-text: #f8fafc;
+  --node-chip-border: #4a5568;
+  --node-action-btn-text: #f1f5f9;
+  --node-blockcipher-bg: #4a3520;
+  --node-blockcipher-text: #fef3e2;
+  --node-key-bg: #1e3a4f;
+  --node-key-text: #e8f4fc;
+  --node-plaintext-bg: #1a3d2a;
+  --node-plaintext-text: #e8fce8;
+}

@@ -67,11 +67,12 @@ function IVNode({ id, data }) {
     <div
       style={{
         padding: 10,
-        border: '1px solid #ff00007b',
-        borderRadius: 6,
-        background: 'lightcoral',
+        border: "1px solid var(--danger-soft)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--node-iv-bg)",
+        color: "var(--text)",
         position: 'relative',
-        minWidth: 200,
+        minWidth: 172,
       }}
     >
       <button
@@ -84,7 +85,7 @@ function IVNode({ id, data }) {
           border: 'none',
           background: 'transparent',
           cursor: 'pointer',
-          color: '#b00',
+          color: 'var(--danger)',
           fontWeight: 'bold',
           display: checkModeForDeleteButton(data?.mode),
         }}
@@ -101,13 +102,15 @@ function IVNode({ id, data }) {
           style={{
             width: '100%',
             height: 48,
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: 10,
             padding: 4,
             resize: 'none',
-            border: '1px solid #999',
+            border: '1px solid var(--border)',
             borderRadius: 4,
             boxSizing: 'border-box',
+            background: 'var(--node-field-bg)',
+            color: 'var(--node-field-text)',
           }}
         />
         <div style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 4, marginTop: 6 }}>Bits:</div>
@@ -118,13 +121,15 @@ function IVNode({ id, data }) {
           style={{
             width: '100%',
             minHeight: 60,
-            fontFamily: 'monospace',
+            fontFamily: 'var(--font-mono)',
             fontSize: 10,
             padding: 4,
             resize: 'none',
-            border: '1px solid #999',
+            border: '1px solid var(--border)',
             borderRadius: 4,
             boxSizing: 'border-box',
+            background: 'var(--node-field-bg)',
+            color: 'var(--node-field-text)',
           }}
         />
         <div style={{ marginTop: 6 }}>
@@ -136,17 +141,18 @@ function IVNode({ id, data }) {
               fontSize: 11,
               cursor: 'pointer',
               borderRadius: 4,
-              border: '1px solid #999',
-              background: '#fff',
+              border: '1px solid var(--border)',
+              background: 'var(--surface-hover)',
+              color: 'var(--node-action-btn-text)',
             }}
           >
             🎲 128 bit
           </button>
         </div>
       </div>
-      <Handle type="source" position={Position.Right} id="out" style={{ background: 'red' }} />
+      <Handle type="source" position={Position.Right} id="out" style={{ background: "var(--node-iv-handle)" }} />
       {showLabels && (
-        <div style={{ position: 'absolute', top: '46%', right: -24, fontSize: 10, color: '#b00' }}>
+        <div style={{ position: 'absolute', top: '46%', right: -24, fontSize: 10, color: 'var(--danger)' }}>
           out
         </div>
       )}

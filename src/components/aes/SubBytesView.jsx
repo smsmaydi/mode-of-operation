@@ -150,7 +150,7 @@ function xorWords(a, b) {
   return a.map((_, i) => (a[i] ^ b[i]) & 0xff);
 }
 
-/** Compute next round key from current 16-byte key. roundIndex = 1..10 (Rcon(1) for K1, Rcon(2) for K2, ...). Returns { nextKey, detail }. */
+/** Next 128-bit round key (internal only; key schedule is not shown in the UI). */
 function computeNextRoundKey(prevKey16, subByteFn, roundIndex = 1) {
   const W0 = getKeyWord(prevKey16, 0);
   const W1 = getKeyWord(prevKey16, 1);
@@ -164,51 +164,39 @@ function computeNextRoundKey(prevKey16, subByteFn, roundIndex = 1) {
   const W5 = xorWords(W1, W4);
   const W6 = xorWords(W2, W5);
   const W7 = xorWords(W3, W6);
-  const nextKey = [...W4, ...W5, ...W6, ...W7];
-  return {
-    nextKey,
-    detail: {
-      W0, W1, W2, W3,
-      rotW3,
-      subRotW3,
-      rcon1: rconVal,
-      T,
-      W4, W5, W6, W7,
-    },
-  };
+  return [...W4, ...W5, ...W6, ...W7];
 }
 
-/** Expand 16-byte key to 11 round keys (K0..K10) for AES-128. */
+/** Expand key to K0..K10 (for whitening + full cipher math only). */
 function expandKey(key16, subByteFn) {
   const keys = [key16];
   let prev = key16;
   for (let r = 0; r < 10; r++) {
-    const { nextKey } = computeNextRoundKey(prev, subByteFn, r + 1);
+    const nextKey = computeNextRoundKey(prev, subByteFn, r + 1);
     keys.push(nextKey);
     prev = nextKey;
   }
   return keys;
 }
 
-/** One full round (AddRoundKey → SubBytes → ShiftRows → MixColumns). Returns state after each step. */
-function runFullRound(state, key) {
-  const afterAddRk = state.map((b, i) => (b ^ key[i]) & 0xff);
-  const afterSubBytes = afterAddRk.map((b) => subByte(b));
+/** One pedagogical round: SubBytes → ShiftRows → MixColumns → AddRoundKey(roundKey). */
+function runRoundSubShiftMixArk(state, roundKey) {
+  const afterSubBytes = state.map((b) => subByte(b));
   const afterShiftRows = applyShiftRows(afterSubBytes);
   const afterMixColumns = applyMixColumns(afterShiftRows);
-  return { afterAddRk, afterSubBytes, afterShiftRows, afterMixColumns };
+  const afterAddRoundKey = afterMixColumns.map((b, i) => (b ^ roundKey[i]) & 0xff);
+  return { afterSubBytes, afterShiftRows, afterMixColumns, afterAddRoundKey };
 }
 
-/** Last round (no MixColumns): AddRoundKey(K9) → SubBytes → ShiftRows → AddRoundKey(K10) = ciphertext. */
-function runLastRound(state, k9, k10) {
-  const afterAddRk = state.map((b, i) => (b ^ k9[i]) & 0xff);
-  const afterSubBytes = afterAddRk.map((b) => subByte(b));
+/** Round 10: SubBytes → ShiftRows → AddRoundKey(K10). */
+function runLastRoundPedagogical(state, k10) {
+  const afterSubBytes = state.map((b) => subByte(b));
   const afterShiftRows = applyShiftRows(afterSubBytes);
-  const ciphertext = afterShiftRows.map((b, i) => (b ^ k10[i]) & 0xff);
-  return { afterAddRk, afterSubBytes, afterShiftRows, ciphertext };
+  const afterAddRoundKey = afterShiftRows.map((b, i) => (b ^ k10[i]) & 0xff);
+  return { afterSubBytes, afterShiftRows, afterMixColumns: null, afterAddRoundKey };
 }
 
-function SubBytesView({ payload, onClose }) {
+function SubBytesView({ payload, onClose, embedded = false }) {
   const derived = useMemo(() => {
     const hasPayload = payload?.nodes && payload?.edges && payload?.ciphertextId;
     console.log("[SubBytesView] useMemo derived", { hasPayload, nodesCount: payload?.nodes?.length, edgesCount: payload?.edges?.length, ciphertextId: payload?.ciphertextId });
@@ -226,88 +214,36 @@ function SubBytesView({ payload, onClose }) {
   );
   const keyValid = roundKey.length === 16 && roundKey.every((b) => b != null && typeof b === "number");
   const allKeys = useMemo(() => (keyValid ? expandKey(roundKey, subByte) : []), [keyValid, roundKey]);
-  const roundOutputs = useMemo(() => {
-    if (!keyValid || allKeys.length !== 11) return [];
-    const out = [];
-    let state = [...initialState];
-    for (let r = 0; r < 9; r++) {
-      out.push(runFullRound(state, allKeys[r]));
-      state = out[r].afterMixColumns;
-    }
-    out.push(runLastRound(state, allKeys[9], allKeys[10]));
-    return out;
+  const whitenedState = useMemo(() => {
+    if (!keyValid || allKeys.length !== 11) return null;
+    return initialState.map((b, i) => (b ^ allKeys[0][i]) & 0xff);
   }, [keyValid, allKeys, initialState]);
 
+  const roundOutputs = useMemo(() => {
+    if (!keyValid || allKeys.length !== 11 || !whitenedState) return [];
+    const out = [];
+    let state = [...whitenedState];
+    for (let r = 0; r < 9; r++) {
+      const block = runRoundSubShiftMixArk(state, allKeys[r + 1]);
+      out.push(block);
+      state = block.afterAddRoundKey;
+    }
+    out.push(runLastRoundPedagogical(state, allKeys[10]));
+    return out;
+  }, [keyValid, allKeys, whitenedState]);
+
   const [activeRound, setActiveRound] = useState(() => payload?.initialRound ?? 0); // 0..9, display as Round 1..10
-  const activeStep = 0; // no longer used (Prev/Next are per-section); kept so any stale ref doesn't throw
 
   const currentRoundInputState =
-    activeRound === 0 ? initialState : roundOutputs[activeRound - 1]?.afterMixColumns ?? Array(16).fill(null);
-  const currentRoundKey = allKeys[activeRound] ?? roundKey;
+    activeRound === 0
+      ? whitenedState ?? initialState
+      : roundOutputs[activeRound - 1]?.afterAddRoundKey ?? Array(16).fill(null);
+
   const isLastRound = activeRound === 9;
+  const completeAllPendingRef = useRef(false);
 
-  // —— AddRoundKey ——
-  const [addRoundKeyOutput, setAddRoundKeyOutput] = useState(() => Array(16).fill(null));
-  const [arkCursor, setArkCursor] = useState(0);
-  const [arkPhase, setArkPhase] = useState(0);
-  const [arkPlaying, setArkPlaying] = useState(false);
-  const arkTimerRef = useRef(null);
-
-  const arkComplete = arkCursor >= 16;
-  const arkAdvance = useCallback(() => {
-    if (arkCursor >= 16) {
-      setArkPlaying(false);
-      return;
-    }
-    if (arkPhase === 0) {
-      setArkPhase(1);
-      return;
-    }
-    if (arkPhase === 1) {
-      setArkPhase(2);
-      return;
-    }
-    setAddRoundKeyOutput((prev) => {
-      const next = [...prev];
-      next[arkCursor] = currentRoundInputState[arkCursor] ^ currentRoundKey[arkCursor];
-      return next;
-    });
-    setArkCursor((c) => c + 1);
-    setArkPhase(0);
-  }, [arkCursor, arkPhase, currentRoundInputState, currentRoundKey]);
-
-  const handleArkPrev = useCallback(() => {
-    setArkPlaying(false);
-    if (arkPhase === 2) {
-      setArkPhase(1);
-      return;
-    }
-    if (arkPhase === 1) {
-      setArkPhase(0);
-      return;
-    }
-    if (arkPhase === 0 && arkCursor > 0) {
-      const prevCursor = arkCursor - 1;
-      setAddRoundKeyOutput((prev) => {
-        const next = [...prev];
-        next[prevCursor] = null;
-        return next;
-      });
-      setArkCursor(prevCursor);
-      setArkPhase(2);
-    }
-  }, [arkCursor, arkPhase]);
-
-  useEffect(() => {
-    if (!arkPlaying) return;
-    const delay = arkPhase === 2 ? 400 : 550;
-    const t = setTimeout(arkAdvance, delay);
-    arkTimerRef.current = t;
-    return () => clearTimeout(t);
-  }, [arkPlaying, arkCursor, arkPhase, arkAdvance]);
-
-  // SubBytes input = AddRoundKey output
-  const subBytesInputState = addRoundKeyOutput;
+  // SubBytes input = round entry state (K₀ whitening + round keys are internal only; not shown)
+  const subBytesInputState = currentRoundInputState;
 
   // —— SubBytes ——
   const [subBytesOutput, setSubBytesOutput] = useState(() => Array(16).fill(null));
@@ -373,30 +309,12 @@ function SubBytesView({ payload, onClose }) {
     return () => clearTimeout(t);
   }, [sbPlaying, sbCursor, sbPhase, sbAdvance]);
 
-  const handleArkReset = () => {
-    setArkPlaying(false);
-    setArkCursor(0);
-    setArkPhase(0);
-    setAddRoundKeyOutput(Array(16).fill(null));
-    setSubBytesOutput(Array(16).fill(null));
-    setSbCursor(0);
-    setSbPhase(0);
-    setSbPlaying(false);
-  };
   const handleSbReset = () => {
     setSbPlaying(false);
     setSbCursor(0);
     setSbPhase(0);
     setSubBytesOutput(Array(16).fill(null));
   };
-
-  const handleShowArkResult = useCallback(() => {
-    setArkPlaying(false);
-    const full = Array.from({ length: 16 }, (_, i) => currentRoundInputState[i] ^ currentRoundKey[i]);
-    setAddRoundKeyOutput(full);
-    setArkCursor(16);
-    setArkPhase(0);
-  }, [currentRoundInputState, currentRoundKey]);
 
   const handleShowSbResult = useCallback(() => {
     setSbPlaying(false);
@@ -490,6 +408,18 @@ function SubBytesView({ payload, onClose }) {
     setShiftRowsWorkingState([...shiftRowsInputState]);
   }, [shiftRowsInputReady, shiftRowsInputState]);
 
+  const handleCompleteAllSteps = useCallback(() => {
+    if (!subBytesInputState?.length || subBytesInputState.some((b) => b == null)) return;
+    setSbPlaying(false);
+    setSrPlaying(false);
+    setMcPlaying(false);
+    completeAllPendingRef.current = true;
+    const fullSb = subBytesInputState.map((b) => subByte(b));
+    setSubBytesOutput(fullSb);
+    setSbCursor(16);
+    setSbPhase(0);
+  }, [subBytesInputState]);
+
   const handleSrReset = useCallback(() => {
     setSrPlaying(false);
     setSrCursor(0);
@@ -508,10 +438,6 @@ function SubBytesView({ payload, onClose }) {
   // —— MixColumns (input = Shift Rows output), step = one column at a time ——
   const mixColumnsInputState = shiftRowsOutput;
   const mixColumnsInputReady = shiftRowsInputReady && mixColumnsInputState.every((b) => b != null);
-  const mixColumnsOutput = useMemo(() => {
-    if (!mixColumnsInputReady) return Array(16).fill(null);
-    return applyMixColumns(mixColumnsInputState);
-  }, [mixColumnsInputReady, mixColumnsInputState]);
   const [mcOutputState, setMcOutputState] = useState(() => Array(16).fill(null));
   const [mcCursor, setMcCursor] = useState(0); // 0..3 = column index
   const [mcPlaying, setMcPlaying] = useState(false);
@@ -579,119 +505,29 @@ function SubBytesView({ payload, onClose }) {
     setMcCursor(4);
   }, [mixColumnsInputReady, mixColumnsInputState]);
 
-  // —— Round Key 1 (key schedule: Round 0 key → Round 1 key) ——
-  const rk1InputReady = !isLastRound && currentRoundKey.length === 16 && currentRoundKey.every((b) => b != null && typeof b === "number");
-  const rk1RoundIndex = activeRound + 1; // 1..10: which next key we derive (K1, K2, ... K10)
-  const rk1Detail = useMemo(() => {
-    if (!rk1InputReady) return null;
-    return computeNextRoundKey(currentRoundKey, subByte, rk1RoundIndex);
-  }, [rk1InputReady, currentRoundKey, rk1RoundIndex]);
-
-  // —— K10 derivation (for Round 10: how K10 was obtained from K9) ——
-  const rk10Detail = useMemo(() => {
-    if (!keyValid || !allKeys[9] || allKeys.length < 11) return null;
-    return computeNextRoundKey(allKeys[9], subByte, 10);
-  }, [keyValid, allKeys]);
-  const rk1FullOutput = useMemo(() => (rk1Detail ? rk1Detail.nextKey : Array(16).fill(null)), [rk1Detail]);
-  const [rk1OutputState, setRk1OutputState] = useState(() => Array(16).fill(null));
-  const [rk1Cursor, setRk1Cursor] = useState(0); // 0..3 = new column index (W4, W5, W6, W7)
-  const [rk1Playing, setRk1Playing] = useState(false);
-  const rk1TimerRef = useRef(null);
-
-  const rk1Complete = rk1Cursor >= 4;
-  const rk1Advance = useCallback(() => {
-    if (rk1Cursor >= 4 || !rk1Detail) {
-      setRk1Playing(false);
-      return;
-    }
-    const cols = [rk1Detail.detail.W4, rk1Detail.detail.W5, rk1Detail.detail.W6, rk1Detail.detail.W7];
-    const col = cols[rk1Cursor];
-    const idx = getColumnIndices(rk1Cursor);
-    setRk1OutputState((prev) => {
-      const next = [...prev];
-      idx.forEach((i, r) => {
-        next[i] = col[r];
-      });
-      return next;
-    });
-    setRk1Cursor((c) => c + 1);
-  }, [rk1Cursor, rk1Detail]);
-
-  const handleRk1Prev = useCallback(() => {
-    setRk1Playing(false);
-    if (rk1Cursor > 0) {
-      const prevCol = rk1Cursor - 1;
-      const idx = getColumnIndices(prevCol);
-      setRk1OutputState((prev) => {
-        const next = [...prev];
-        idx.forEach((i) => { next[i] = null; });
-        return next;
-      });
-      setRk1Cursor(prevCol);
-    }
-  }, [rk1Cursor]);
+  const canCompleteAllRound =
+    subBytesInputState?.length === 16 && subBytesInputState.every((b) => b != null);
 
   useEffect(() => {
-    if (!rk1Playing) return;
-    const t = setTimeout(rk1Advance, 600);
-    rk1TimerRef.current = t;
-    return () => clearTimeout(t);
-  }, [rk1Playing, rk1Cursor, rk1Advance]);
-
-  useEffect(() => {
-    if (!rk1InputReady) {
-      setRk1OutputState(Array(16).fill(null));
-      setRk1Cursor(0);
-      setRk1Playing(false);
-    }
-  }, [rk1InputReady]);
-
-  const handleRk1Reset = useCallback(() => {
-    setRk1Playing(false);
-    setRk1Cursor(0);
-    setRk1OutputState(Array(16).fill(null));
-  }, []);
-
-  const handleShowRk1Result = useCallback(() => {
-    setRk1Playing(false);
-    if (!rk1InputReady || !rk1Detail) return;
-    setRk1OutputState(rk1Detail.nextKey);
-    setRk1Cursor(4);
-  }, [rk1InputReady, rk1Detail]);
-
-  /** Complete all steps of the current round at once (fill from precomputed roundOutputs). */
-  const handleCompleteAllRound = useCallback(() => {
-    if (!roundOutputs[activeRound]) return;
-    const out = roundOutputs[activeRound];
-    setArkPlaying(false);
-    setSbPlaying(false);
-    setSrPlaying(false);
-    setMcPlaying(false);
-    setRk1Playing(false);
-    setAddRoundKeyOutput(out.afterAddRk);
-    setArkCursor(16);
-    setArkPhase(0);
-    setSubBytesOutput(out.afterSubBytes);
-    setSbCursor(16);
-    setSbPhase(0);
-    setShiftRowsWorkingState(out.afterShiftRows);
+    if (!completeAllPendingRef.current) return;
+    if (!shiftRowsInputReady || !subBytesOutput.every((b) => b != null)) return;
+    completeAllPendingRef.current = false;
+    const shifted = applyShiftRows(subBytesOutput);
+    setShiftRowsWorkingState(shifted);
     setSrCursor(3);
     setSrPhase(0);
-    if (out.afterMixColumns) {
-      setMcOutputState(out.afterMixColumns);
+    if (!isLastRound) {
+      setMcOutputState(applyMixColumns(shifted));
       setMcCursor(4);
+      setMcPlaying(false);
+    } else {
+      setMcOutputState(Array(16).fill(null));
+      setMcCursor(0);
     }
-    if (!isLastRound && allKeys[activeRound + 1]) {
-      setRk1OutputState(allKeys[activeRound + 1]);
-      setRk1Cursor(4);
-    }
-  }, [activeRound, roundOutputs, isLastRound, allKeys]);
+  }, [shiftRowsInputReady, subBytesOutput, isLastRound]);
 
   useEffect(() => {
-    setAddRoundKeyOutput(Array(16).fill(null));
-    setArkCursor(0);
-    setArkPhase(0);
-    setArkPlaying(false);
+    completeAllPendingRef.current = false;
     setSubBytesOutput(Array(16).fill(null));
     setSbCursor(0);
     setSbPhase(0);
@@ -703,83 +539,57 @@ function SubBytesView({ payload, onClose }) {
     setMcOutputState(Array(16).fill(null));
     setMcCursor(0);
     setMcPlaying(false);
-    setRk1OutputState(Array(16).fill(null));
-    setRk1Cursor(0);
-    setRk1Playing(false);
   }, [initialState, roundKey, activeRound]);
+
+  const rootLayout = embedded
+    ? {
+        position: "relative",
+        flex: 1,
+        minHeight: 0,
+        zIndex: 1,
+        overflow: "auto",
+      }
+    : {
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        overflow: "auto",
+      };
 
   return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
-        background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)",
-        color: "#eee",
+        ...rootLayout,
+        background: "var(--aes-deck-gradient)",
+        color: "var(--aes-deck-text)",
         display: "flex",
         flexDirection: "column",
-        zIndex: 1000,
-        overflow: "auto",
       }}
     >
       <header
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "flex-start",
           padding: "12px 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
+          borderBottom: "1px solid var(--aes-deck-border)",
           flexShrink: 0,
           flexWrap: "wrap",
           gap: 10,
         }}
       >
-        <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600 }}>
+        <h1 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "#111" }}>
           AES{derived?.isCtr ? " (CTR)" : ""} — Round {activeRound + 1} of 10
           {derived ? (
-            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.7)", marginLeft: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--aes-deck-text-muted)", marginLeft: 10 }}>
               (using graph data)
             </span>
           ) : (
-            <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,0.5)", marginLeft: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--aes-deck-text-faint)", marginLeft: 10 }}>
               (demo data)
             </span>
           )}
         </h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            className="nodrag"
-            onClick={handleCompleteAllRound}
-            disabled={!roundOutputs[activeRound]}
-            style={{
-              padding: "8px 14px",
-              background: "rgba(34, 197, 94, 0.5)",
-              border: "1px solid rgba(34, 197, 94, 0.8)",
-              borderRadius: 8,
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 600,
-              fontSize: 13,
-            }}
-            title="Complete all steps of this round at once"
-          >
-            Complete all
-          </button>
-          <button
-            onClick={() => onClose(activeRound)}
-            className="nodrag"
-            style={{
-              padding: "8px 16px",
-              background: "rgba(255,255,255,0.15)",
-              border: "1px solid rgba(255,255,255,0.3)",
-              borderRadius: 8,
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            ← Back to graph
-          </button>
-        </div>
       </header>
 
       {/* Round + Step navigation at top */}
@@ -790,13 +600,13 @@ function SubBytesView({ payload, onClose }) {
           alignItems: "center",
           gap: 6,
           padding: "12px 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.12)",
+          borderBottom: "1px solid var(--aes-deck-border)",
           flexShrink: 0,
-          background: "rgba(0,0,0,0.2)",
+          background: "var(--aes-deck-shade)",
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginRight: 8 }}>Round:</span>
+        <span style={{ fontSize: 12, color: "#111", marginRight: 8, fontWeight: 600 }}>Round:</span>
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
           const isActive = activeRound === num - 1;
           return (
@@ -809,9 +619,9 @@ function SubBytesView({ payload, onClose }) {
                 width: 36,
                 height: 36,
                 borderRadius: 8,
-                border: isActive ? "2px solid rgba(99, 102, 241, 0.9)" : "1px solid rgba(255,255,255,0.25)",
-                background: isActive ? "rgba(99, 102, 241, 0.35)" : "rgba(255,255,255,0.08)",
-                color: "#fff",
+                border: isActive ? "2px solid var(--aes-deck-round-active-border)" : "1px solid var(--aes-deck-border-strong)",
+                background: isActive ? "var(--aes-deck-round-active-bg)" : "var(--aes-deck-cell-bg)",
+                color: "#111",
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -821,75 +631,52 @@ function SubBytesView({ payload, onClose }) {
             </button>
           );
         })}
-      </div>
-
-      {/* ——— 1. AddRoundKey ——— */}
-      <section
-        style={{
-          padding: "20px 24px",
-          borderBottom: "1px solid rgba(255,255,255,0.12)",
-        }}
-      >
-        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-          1. AddRoundKey (K{activeRound})
-        </h2>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16, maxWidth: 720 }}>
-          State is XORed with Round Key {activeRound + 1}. 4×4 grid is <strong>column-major</strong>. Input state is {derived?.isCtr ? (activeRound === 0 ? "counter block (nonce ‖ counter)" : "output of previous round MixColumns") : (activeRound === 0 ? "plaintext" : "output of previous round MixColumns")}.
-        </p>
-        <div
+        <button
+          type="button"
+          className="nodrag"
+          onClick={handleCompleteAllSteps}
+          disabled={!canCompleteAllRound}
+          title={
+            canCompleteAllRound
+              ? "Instantly complete SubBytes, ShiftRows, and MixColumns for this round"
+              : "Round needs a full 16-byte input state"
+          }
           style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            gap: 32,
-            flexWrap: "wrap",
+            ...btnStyle,
+            marginLeft: 10,
+            opacity: canCompleteAllRound ? 1 : 0.5,
+            cursor: canCompleteAllRound ? "pointer" : "not-allowed",
           }}
         >
-          <AddRoundKeyGrid title={`Round Key ${activeRound + 1} (K${activeRound})`} values={currentRoundKey} cursor={arkCursor} phase={arkPhase} highlightKey cellSize={CELL_SIZE_STATE} />
-          <AddRoundKeyGrid title={derived?.isCtr ? (activeRound === 0 ? "Counter block (nonce ‖ counter)" : "State (after previous MixColumns)") : (activeRound === 0 ? "State (plaintext)" : "State (after previous MixColumns)")} values={currentRoundInputState} cursor={arkCursor} phase={arkPhase} highlightState cellSize={CELL_SIZE_STATE} />
-          <AddRoundKeyGrid title="State ⊕ Round Key (output)" values={addRoundKeyOutput} cursor={arkCursor} phase={arkPhase} isOutput cellSize={CELL_SIZE_STATE} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-          <button className="nodrag" style={btnStyle} onClick={() => (arkComplete ? (handleArkReset(), setArkPlaying(true)) : setArkPlaying((p) => !p))}>
-            {arkComplete ? "▶ Play again" : arkPlaying ? "⏸ Pause" : "▶ Play"}
-          </button>
-          <button className="nodrag" style={btnStyle} onClick={handleArkPrev} disabled={arkPlaying || (arkCursor === 0 && arkPhase === 0)}>
-            Prev
-          </button>
-          <button className="nodrag" style={btnStyle} onClick={arkAdvance} disabled={arkPlaying || arkComplete}>
-            Next
-          </button>
-          <button className="nodrag" style={btnStyle} onClick={handleArkReset}>
-            Reset
-          </button>
-          <button
-            className="nodrag"
-            style={{ ...btnStyle, background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)" }}
-            onClick={handleShowArkResult}
-            title="Skip animation and show final result"
-          >
-            Show result
-          </button>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
-            Byte {Math.min(arkCursor, 15) + 1}/16
-            {arkPhase === 0 && " — State cell"}
-            {arkPhase === 1 && " — Round key cell"}
-            {arkPhase === 2 && " — XOR → output"}
-          </span>
-        </div>
-      </section>
+          Complete all
+        </button>
+      </div>
 
-      {/* ——— 2. SubBytes ——— */}
+      <div
+        style={{
+          padding: "12px 24px",
+          borderBottom: "1px solid var(--aes-deck-border)",
+          fontSize: 12,
+          color: "var(--aes-deck-text-muted)",
+          maxWidth: 920,
+          margin: "0 auto",
+          lineHeight: 1.45,
+        }}
+      >
+        <strong>Note:</strong> This view shows only <strong>SubBytes</strong>, <strong>ShiftRows</strong>, and <strong>MixColumns</strong> (rounds 1–9). Initial AddRoundKey(K₀), per-round AddRoundKey, and the key schedule are applied internally so round boundaries stay correct — they are not animated here.
+      </div>
+
+      {/* ——— 1. SubBytes ——— */}
       <section style={{ padding: "20px 24px 24px", flex: "1 1 auto" }}>
-        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-          2. SubBytes
+        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "var(--aes-deck-text)" }}>
+          1. SubBytes
         </h2>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16 }}>
-          Input state = AddRoundKey output. Each byte is replaced via the S-Box.
+        <p style={{ fontSize: 13, color: "var(--aes-deck-text-muted)", marginBottom: 16 }}>
+          Input = state at the start of this round (after internal whitening / round chaining). Each byte is replaced via the S-Box.
         </p>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 13, marginBottom: 6, color: "rgba(255,255,255,0.8)" }}>S-Box</div>
+            <div style={{ fontSize: 13, marginBottom: 6, color: "var(--aes-deck-text)" }}>S-Box</div>
             <SBoxGrid cursor={sbCursor} phase={sbPhase} sboxCoord={sboxCoord} cellSize={CELL_SIZE_SBOX} />
           </div>
         </div>
@@ -903,7 +690,7 @@ function SubBytesView({ payload, onClose }) {
           }}
         >
           <StateGrid
-            title="Input State (AddRoundKey output)"
+            title="Input state (round entry)"
             values={subBytesInputState}
             outputState={subBytesOutput}
             cursor={sbCursor}
@@ -936,14 +723,19 @@ function SubBytesView({ payload, onClose }) {
           </button>
           <button
             className="nodrag"
-            style={{ ...btnStyle, background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)" }}
+            style={{
+              ...btnStyle,
+              background: "var(--aes-deck-btn-ghost-bg)",
+              border: "1px solid var(--aes-deck-border-strong)",
+              color: "var(--aes-deck-text)",
+            }}
             onClick={handleShowSbResult}
             title="Skip animation and show final result"
             disabled={subBytesInputState.every((b) => b == null)}
           >
             Show result
           </button>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+          <span style={{ fontSize: 12, color: "var(--aes-deck-text-muted)" }}>
             Byte {Math.min(sbCursor, 15) + 1}/16
             {sbPhase === 0 && " — Input cell"}
             {sbPhase === 1 && " — S-Box lookup"}
@@ -952,17 +744,17 @@ function SubBytesView({ payload, onClose }) {
         </div>
       </section>
 
-      {/* ——— 3. Shift Rows ——— */}
+      {/* ——— 2. Shift Rows ——— */}
       <section
         style={{
           padding: "20px 24px 24px",
-          borderTop: "1px solid rgba(255,255,255,0.12)",
+          borderTop: "1px solid var(--aes-deck-border)",
         }}
       >
-        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-          3. Shift Rows
+        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "var(--aes-deck-text)" }}>
+          2. Shift Rows
         </h2>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: "var(--aes-deck-text-muted)", marginBottom: 16 }}>
           Row 0 unchanged; row 1 shifts 1 left, row 2 shifts 2 left, row 3 shifts 3 left (cyclic).
         </p>
         <div
@@ -1017,14 +809,19 @@ function SubBytesView({ payload, onClose }) {
           </button>
           <button
             className="nodrag"
-            style={{ ...btnStyle, background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)" }}
+            style={{
+              ...btnStyle,
+              background: "var(--aes-deck-btn-ghost-bg)",
+              border: "1px solid var(--aes-deck-border-strong)",
+              color: "var(--aes-deck-text)",
+            }}
             onClick={handleShowSrResult}
             title="Skip animation and show final result"
             disabled={!shiftRowsInputReady}
           >
             Show result
           </button>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+          <span style={{ fontSize: 12, color: "var(--aes-deck-text-muted)" }}>
             Row {srCursor < 3 ? srCursor + 1 : 3}/3
             {srPhase === 0 && " — Highlight row"}
             {srPhase === 1 && " — Row sliding left"}
@@ -1032,151 +829,19 @@ function SubBytesView({ payload, onClose }) {
         </div>
       </section>
 
-      {isLastRound && roundOutputs[9] && (
-        <section
-          style={{
-            padding: "20px 24px 24px",
-            borderTop: "1px solid rgba(255,255,255,0.12)",
-          }}
-        >
-          {/* 4. Round Key 10 (Key Schedule): between Shift Rows and Final AddRoundKey */}
-          {rk10Detail && (
-            <>
-              <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-                4. Round Key 10 (Key Schedule)
-              </h2>
-              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16, maxWidth: 720 }}>
-                K10 (needed for the final step) is derived from K9 the same way as K1 from K0: RotWord(W3), SubWord, Rcon(10), then W4–W7.
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "flex-start",
-                  gap: 32,
-                  flexWrap: "wrap",
-                }}
-              >
-                <ShiftRowsStaticGrid title="K9 (current)" values={allKeys[9]} cellSize={CELL_SIZE_STATE} />
-                <RoundKey1DetailPanel
-                  detail={rk10Detail}
-                  roundIndex={10}
-                  currentColumn={3}
-                  inputReady={true}
-                />
-                <ShiftRowsStaticGrid title="K10 (new)" values={allKeys[10]} cellSize={CELL_SIZE_STATE} />
-              </div>
-            </>
-          )}
-
-          <h2 style={{ fontSize: 16, margin: rk10Detail ? "24px 0 8px" : "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-            5. Final AddRoundKey (K10) → {derived?.isCtr ? "Keystream" : "Ciphertext"}
-          </h2>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16 }}>
-            {derived?.isCtr
-              ? "Last round has no MixColumns. State after Shift Rows is XORed with K10 to produce the keystream block (plaintext ⊕ keystream = ciphertext in CTR)."
-              : "Last round has no MixColumns. State after Shift Rows is XORed with K10 (from step 4) to produce the ciphertext."}
-          </p>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "flex-start",
-              gap: 32,
-              flexWrap: "wrap",
-            }}
-          >
-            <ShiftRowsStaticGrid
-              title="State (after Shift Rows)"
-              values={roundOutputs[9].afterShiftRows}
-              cellSize={CELL_SIZE_STATE}
-            />
-            <ShiftRowsStaticGrid
-              title="K10"
-              values={allKeys[10]}
-              cellSize={CELL_SIZE_STATE}
-            />
-            <ShiftRowsStaticGrid
-              title={derived?.isCtr ? "Keystream" : "Ciphertext"}
-              values={roundOutputs[9].ciphertext}
-              cellSize={CELL_SIZE_STATE}
-            />
-          </div>
-          {/* Verification: ECB/CBC = ciphertext; CTR = keystream (AES(counter block)) */}
-          {initialState?.length === 16 && roundKey?.length === 16 && (() => {
-            const keyHex = roundKey.map((b) => b.toString(16).padStart(2, "0")).join("");
-            let expectedFirstBlockHex = "";
-            try {
-              const key = CryptoJS.enc.Hex.parse(keyHex);
-              if (derived?.isCtr) {
-                const counterBlockHex = initialState.map((b) => b.toString(16).padStart(2, "0")).join("");
-                const counterWords = CryptoJS.enc.Hex.parse(counterBlockHex);
-                const encrypted = CryptoJS.AES.encrypt(counterWords, key, {
-                  mode: CryptoJS.mode.ECB,
-                  padding: CryptoJS.pad.NoPadding,
-                });
-                expectedFirstBlockHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex).slice(0, 32);
-              } else {
-                const plaintextStr = (typeof derived?.plaintextString === "string" && derived.plaintextString.length > 0)
-                  ? derived.plaintextString
-                  : String.fromCharCode(...initialState);
-                if (derived?.isCbc && derived?.ivBytes?.length === 16) {
-                  const ivHex = derived.ivBytes.map((b) => b.toString(16).padStart(2, "0")).join("");
-                  const iv = CryptoJS.enc.Hex.parse(ivHex);
-                  const encrypted = CryptoJS.AES.encrypt(plaintextStr, key, {
-                    mode: CryptoJS.mode.CBC,
-                    iv,
-                    padding: CryptoJS.pad.Pkcs7,
-                  });
-                  const fullHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
-                  expectedFirstBlockHex = fullHex.slice(0, 32);
-                } else {
-                  const encrypted = CryptoJS.AES.encrypt(plaintextStr, key, {
-                    mode: CryptoJS.mode.ECB,
-                    padding: CryptoJS.pad.Pkcs7,
-                  });
-                  const fullHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex);
-                  expectedFirstBlockHex = fullHex.slice(0, 32);
-                }
-              }
-            } catch (e) {
-              expectedFirstBlockHex = "(error)";
-            }
-            const stepsHex = roundOutputs[9].ciphertext.map((b) => b.toString(16).padStart(2, "0")).join("");
-            const match = stepsHex.toLowerCase() === expectedFirstBlockHex.toLowerCase();
-            return (
-              <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 8, fontSize: 12 }}>
-                <div style={{ color: "rgba(255,255,255,0.9)", marginBottom: 6 }}>
-                  Verification {derived?.isCtr ? "— CTR: Steps keystream vs CryptoJS AES(counter block)" : derived?.isCbc ? "(first block = Enc node) — CBC" : "(first block = Enc node)"}
-                </div>
-                <div style={{ color: "rgba(255,255,255,0.7)", fontFamily: "monospace", wordBreak: "break-all" }}>
-                  Steps: {stepsHex}
-                </div>
-                <div style={{ color: "rgba(255,255,255,0.7)", fontFamily: "monospace", wordBreak: "break-all" }}>
-                  Expected (CryptoJS): {expectedFirstBlockHex}
-                </div>
-                <div style={{ marginTop: 6, color: match ? "#7dd87d" : "#f08" }}>
-                  {match ? "✓ Match" : derived?.isCtr ? "✗ Mismatch — check counter block/key or AES steps" : "✗ Mismatch — check key/plaintext format or AES steps"}
-                </div>
-              </div>
-            );
-          })()}
-        </section>
-      )}
-
       {!isLastRound && (
       <>
-      {/* ——— 4. MixColumns ——— */}
+      {/* ——— 3. MixColumns ——— */}
       <section
         style={{
           padding: "20px 24px 24px",
-          borderTop: "1px solid rgba(255,255,255,0.12)",
+          borderTop: "1px solid var(--aes-deck-border)",
         }}
       >
-        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-          4. MixColumns
+        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "var(--aes-deck-text)" }}>
+          3. MixColumns
         </h2>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: "var(--aes-deck-text-muted)", marginBottom: 16 }}>
           Each column of the state is multiplied by the fixed matrix below (in GF(2^8)). Column 0, then 1, 2, 3.
         </p>
         <div
@@ -1230,160 +895,61 @@ function SubBytesView({ payload, onClose }) {
           </button>
           <button
             className="nodrag"
-            style={{ ...btnStyle, background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)" }}
+            style={{
+              ...btnStyle,
+              background: "var(--aes-deck-btn-ghost-bg)",
+              border: "1px solid var(--aes-deck-border-strong)",
+              color: "var(--aes-deck-text)",
+            }}
             onClick={handleShowMcResult}
             title="Skip animation and show final result"
             disabled={!mixColumnsInputReady}
           >
             Show result
           </button>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+          <span style={{ fontSize: 12, color: "var(--aes-deck-text-muted)" }}>
             Column {Math.min(mcCursor, 3) + 1}/4
-          </span>
-        </div>
-      </section>
-
-      {/* ——— 5. Round Key (Key Schedule) ——— */}
-      <section
-        style={{
-          padding: "20px 24px 24px",
-          borderTop: "1px solid rgba(255,255,255,0.12)",
-        }}
-      >
-        <h2 style={{ fontSize: 16, margin: "0 0 8px", color: "rgba(255,255,255,0.95)" }}>
-          5. Round Key {activeRound + 1} (Key Schedule)
-        </h2>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 16, maxWidth: 720 }}>
-          Derive next round key from current one. Current key = K{activeRound} (4 words W0–W3). Next key = K{activeRound + 1} (W4–W7).
-          The next round key is W4, W5, W6, W7. We take the last word W3, rotate it left by one byte, apply the S-Box to each byte,
-          XOR with a round constant Rcon({activeRound + 1}), then XOR that result T with W0 to get W4. The remaining columns are: W5 = W1 ⊕ W4, W6 = W2 ⊕ W5, W7 = W3 ⊕ W6.
-        </p>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            gap: 32,
-            flexWrap: "wrap",
-          }}
-        >
-          <ShiftRowsStaticGrid
-            title={`K${activeRound} (current)`}
-            values={currentRoundKey}
-            cellSize={CELL_SIZE_STATE}
-          />
-          <RoundKey1DetailPanel
-            detail={rk1Detail}
-            roundIndex={rk1RoundIndex}
-            currentColumn={rk1Complete ? 3 : rk1Cursor}
-            inputReady={rk1InputReady}
-          />
-          <MixColumnsInputGrid
-            title={`K${activeRound + 1} (new)`}
-            values={rk1OutputState}
-            highlightColumn={rk1Complete ? null : rk1Cursor}
-            cellSize={CELL_SIZE_STATE}
-          />
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-          <button
-            className="nodrag"
-            style={btnStyle}
-            onClick={() => (rk1Complete ? (handleRk1Reset(), setRk1Playing(true)) : setRk1Playing((p) => !p))}
-            disabled={!rk1InputReady}
-          >
-            {rk1Complete ? "▶ Play again" : rk1Playing ? "⏸ Pause" : "▶ Play"}
-          </button>
-          <button className="nodrag" style={btnStyle} onClick={handleRk1Prev} disabled={rk1Playing || rk1Cursor === 0}>
-            Prev
-          </button>
-          <button
-            className="nodrag"
-            style={btnStyle}
-            onClick={rk1Advance}
-            disabled={rk1Playing || rk1Complete || !rk1InputReady}
-          >
-            Next
-          </button>
-          <button className="nodrag" style={btnStyle} onClick={handleRk1Reset} disabled={!rk1InputReady}>
-            Reset
-          </button>
-          <button
-            className="nodrag"
-            style={{ ...btnStyle, background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)" }}
-            onClick={handleShowRk1Result}
-            title="Skip animation and show final result"
-            disabled={!rk1InputReady}
-          >
-            Show result
-          </button>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
-            Column {Math.min(rk1Cursor, 3) + 1}/4 (W{Math.min(rk1Cursor, 3) + 4})
           </span>
         </div>
       </section>
       </>
       )}
 
-      {/* Footer: Round navigation + Complete all */}
-      <footer
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 12,
-          padding: "14px 20px",
-          borderTop: "1px solid rgba(255,255,255,0.12)",
-          flexShrink: 0,
-          background: "rgba(0,0,0,0.2)",
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginRight: 4 }}>Round:</span>
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-          const isActive = activeRound === num - 1;
+      {isLastRound && roundOutputs[9] && initialState?.length === 16 && roundKey?.length === 16 && (() => {
+          const keyHex = roundKey.map((b) => b.toString(16).padStart(2, "0")).join("");
+          let expectedFirstBlockHex = "";
+          try {
+            const key = CryptoJS.enc.Hex.parse(keyHex);
+            const blockInputHex = initialState.map((b) => b.toString(16).padStart(2, "0")).join("");
+            const blockWords = CryptoJS.enc.Hex.parse(blockInputHex);
+            const encrypted = CryptoJS.AES.encrypt(blockWords, key, {
+              mode: CryptoJS.mode.ECB,
+              padding: CryptoJS.pad.NoPadding,
+            });
+            expectedFirstBlockHex = encrypted.ciphertext.toString(CryptoJS.enc.Hex).slice(0, 32);
+          } catch (e) {
+            expectedFirstBlockHex = "(error)";
+          }
+          const stepsHex = roundOutputs[9].afterAddRoundKey.map((b) => b.toString(16).padStart(2, "0")).join("");
+          const match = stepsHex.toLowerCase() === expectedFirstBlockHex.toLowerCase();
           return (
-            <button
-              key={num}
-              type="button"
-              className="nodrag"
-              onClick={() => setActiveRound(num - 1)}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 8,
-                border: isActive ? "2px solid rgba(99, 102, 241, 0.9)" : "1px solid rgba(255,255,255,0.25)",
-                background: isActive ? "rgba(99, 102, 241, 0.35)" : "rgba(255,255,255,0.08)",
-                color: "#fff",
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {num}
-            </button>
+            <div style={{ marginTop: 16, padding: 12, background: "var(--aes-deck-shade)", borderRadius: 8, fontSize: 12 }}>
+              <div style={{ color: "var(--aes-deck-text)", marginBottom: 6 }}>
+                Verification — single AES block (ECB, no padding): same 128-bit input as the graph (ECB block, CBC pre-cipher XOR, or CTR counter block)
+              </div>
+              <div style={{ color: "var(--aes-deck-text-muted)", fontFamily: "monospace", wordBreak: "break-all" }}>
+                Step-by-step final state (hex): {stepsHex}
+              </div>
+              <div style={{ color: "var(--aes-deck-text-muted)", fontFamily: "monospace", wordBreak: "break-all" }}>
+                Expected (CryptoJS): {expectedFirstBlockHex}
+              </div>
+              <div style={{ marginTop: 6, color: match ? "var(--aes-deck-match-ok)" : "var(--aes-deck-match-bad)" }}>
+                {match ? "✓ Match" : "✗ Mismatch — check key and 128-bit block input from the graph"}
+              </div>
+            </div>
           );
-        })}
-        <button
-          className="nodrag"
-          onClick={handleCompleteAllRound}
-          disabled={!roundOutputs[activeRound]}
-          style={{
-            marginLeft: 8,
-            padding: "8px 14px",
-            background: "rgba(34, 197, 94, 0.5)",
-            border: "1px solid rgba(34, 197, 94, 0.8)",
-            borderRadius: 8,
-            color: "#fff",
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 13,
-          }}
-          title="Complete all steps of this round at once"
-        >
-          Complete all
-        </button>
-      </footer>
+        })()}
+
     </div>
   );
 }
@@ -1395,137 +961,6 @@ function stateIndexToGrid(k) {
   return row + col * 4;
 }
 
-/** Format 4-byte word as hex. */
-function wordHex(w) {
-  return w.map((b) => (b != null ? b.toString(16).toUpperCase().padStart(2, "0") : "?")).join(" ");
-}
-
-/** Key schedule detail: explanatory step-by-step in English. roundIndex = 1..10 (which key we derive). */
-function RoundKey1DetailPanel({ detail, roundIndex = 1, currentColumn, inputReady }) {
-  const stepBox = (title, desc, value, highlight) => (
-    <div
-      style={{
-        background: highlight ? "rgba(99, 102, 241, 0.25)" : "rgba(255,255,255,0.06)",
-        border: highlight ? "1px solid rgba(255,255,255,0.5)" : "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 8,
-        padding: "8px 12px",
-        marginBottom: 8,
-        fontFamily: "monospace",
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.95)", marginBottom: 2 }}>
-        {title}
-      </div>
-      {desc && (
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", marginBottom: 4, lineHeight: 1.3 }}>
-          {desc}
-        </div>
-      )}
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.9)" }}>
-        {value}
-      </div>
-    </div>
-  );
-  if (!inputReady) {
-    return (
-      <div
-        style={{
-          minWidth: 300,
-          background: "rgba(0,0,0,0.2)",
-          padding: 14,
-          borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
-        }}
-      >
-        <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>
-          How Round Key {roundIndex} is computed
-        </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontStyle: "italic" }}>
-          The Round 0 key must be 16 bytes. Enter a key in the graph (Key node, 128-bit hex).
-        </div>
-      </div>
-    );
-  }
-  if (!detail) {
-    return (
-      <div style={{ minWidth: 300, padding: 14, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
-        Computing…
-      </div>
-    );
-  }
-  const d = detail.detail;
-  return (
-    <div
-      style={{
-        minWidth: 300,
-        maxWidth: 380,
-        background: "rgba(0,0,0,0.2)",
-        padding: 14,
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.12)",
-      }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: "rgba(255,255,255,0.9)" }}>
-        How Round Key {roundIndex} is computed
-      </div>
-      {stepBox(
-        "1. W3 (last column of current key)",
-        `We use the fourth 4-byte word of K${roundIndex - 1}.`,
-        wordHex(d.W3),
-        false
-      )}
-      {stepBox(
-        "2. RotWord(W3)",
-        "Rotate left by one byte: [a,b,c,d] → [b,c,d,a].",
-        wordHex(d.rotW3),
-        false
-      )}
-      {stepBox(
-        "3. SubWord(RotWord(W3))",
-        "Apply the AES S-Box to each byte of the rotated word.",
-        wordHex(d.subRotW3),
-        false
-      )}
-      {stepBox(
-        `4. Rcon(${roundIndex})`,
-        `Round constant for round ${roundIndex}: first byte = 0x${(d.rcon1 && d.rcon1[0] != null ? d.rcon1[0].toString(16).toUpperCase().padStart(2, "0") : "01")}, rest zero. Prevents symmetry.`,
-        wordHex(d.rcon1),
-        false
-      )}
-      {stepBox(
-        `5. T = SubWord(RotWord(W3)) ⊕ Rcon(${roundIndex})`,
-        "XOR the S-Box result with the round constant. This is the \"temp\" word.",
-        wordHex(d.T),
-        false
-      )}
-      {stepBox(
-        "6. W4 = W0 ⊕ T",
-        "First column of the new key: XOR first column of old key with T.",
-        wordHex(d.W4),
-        currentColumn === 0
-      )}
-      {stepBox(
-        "7. W5 = W1 ⊕ W4",
-        "Second column: XOR second column of old key with W4.",
-        wordHex(d.W5),
-        currentColumn === 1
-      )}
-      {stepBox(
-        "8. W6 = W2 ⊕ W5",
-        "Third column: XOR third column of old key with W5.",
-        wordHex(d.W6),
-        currentColumn === 2
-      )}
-      {stepBox(
-        "9. W7 = W3 ⊕ W6",
-        "Fourth column: XOR fourth column of old key with W6.",
-        wordHex(d.W7),
-        currentColumn === 3
-      )}
-    </div>
-  );
-}
-
 /** Fixed MixColumns matrix display (small 4×4 block). */
 function MixColumnsMatrixDisplay() {
   const cellSize = 40;
@@ -1535,10 +970,10 @@ function MixColumnsMatrixDisplay() {
         display: "inline-grid",
         gridTemplateColumns: "repeat(4, 1fr)",
         gap: 6,
-        background: "rgba(0,0,0,0.25)",
+        background: "var(--aes-deck-shade-deep)",
         padding: 10,
         borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.12)",
+        border: "1px solid var(--aes-deck-border)",
       }}
     >
       {MIX_COLUMNS_MATRIX.flatMap((row, rowIndex) =>
@@ -1555,8 +990,8 @@ function MixColumnsMatrixDisplay() {
               fontFamily: "monospace",
               fontWeight: 600,
               fontSize: 14,
-              background: "rgba(99, 102, 241, 0.15)",
-              border: "1px solid rgba(255,255,255,0.2)",
+              background: "var(--step-accent-soft)",
+              border: "1px solid var(--aes-deck-border-strong)",
             }}
           >
             {val.toString(16).toUpperCase().padStart(2, "0")}
@@ -1569,22 +1004,21 @@ function MixColumnsMatrixDisplay() {
 
 /** One row of MixColumns: formula with coeff·byte and term values, then result. */
 function MixColumnRowDetail({ rowIndex, coeffs, terms, result, colBytes }) {
-  const labels = ["s₀", "s₁", "s₂", "s₃"];
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.06)",
+        background: "var(--aes-deck-cell-bg)",
         borderRadius: 8,
         padding: "8px 12px",
         marginBottom: 6,
-        border: "1px solid rgba(255,255,255,0.1)",
+        border: "1px solid var(--aes-deck-border)",
       }}
     >
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.9)", fontFamily: "monospace", marginBottom: 4 }}>
+      <div style={{ fontSize: 11, color: "var(--aes-deck-text)", fontFamily: "monospace", marginBottom: 4 }}>
         <strong>Out[{rowIndex}]</strong> = {coeffs.map((co, i) => `${co.toString(16).toUpperCase().padStart(2, "0")}·${colBytes[i] != null ? colBytes[i].toString(16).toUpperCase().padStart(2, "0") : "?"}`).join(" ⊕ ")}
       </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontFamily: "monospace" }}>
-        = ({terms.map((t) => (t != null ? t.toString(16).toUpperCase().padStart(2, "0") : "?")).join(") ⊕ (")}) = <strong style={{ color: "rgba(34, 197, 94, 0.95)" }}>{result != null ? result.toString(16).toUpperCase().padStart(2, "0") : "?"}</strong>
+      <div style={{ fontSize: 11, color: "var(--aes-deck-text-muted)", fontFamily: "monospace" }}>
+        = ({terms.map((t) => (t != null ? t.toString(16).toUpperCase().padStart(2, "0") : "?")).join(") ⊕ (")}) = <strong style={{ color: "var(--aes-deck-xor-strong)" }}>{result != null ? result.toString(16).toUpperCase().padStart(2, "0") : "?"}</strong>
       </div>
     </div>
   );
@@ -1598,14 +1032,14 @@ function MixColumnsDetailPanel({ currentColumn, inputState, inputReady }) {
   const detail = hasValues ? getMixColumnDetail(colBytes) : null;
   return (
     <div style={{ minWidth: 320, maxWidth: 380 }}>
-      <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>
+      <div style={{ fontSize: 13, marginBottom: 8, color: "var(--aes-deck-text)" }}>
         Column {currentColumn} — how it is computed
       </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: "var(--aes-deck-text-muted)", marginBottom: 8 }}>
         Column bytes [s₀, s₁, s₂, s₃] = [{colBytes.map((b) => (b != null ? b.toString(16).toUpperCase().padStart(2, "0") : "?")).join(", ")}]
       </div>
       {!inputReady || !hasValues ? (
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontStyle: "italic" }}>
+        <div style={{ fontSize: 12, color: "var(--aes-deck-text-faint)", fontStyle: "italic" }}>
           Input not ready or column empty. Use Step to advance.
         </div>
       ) : (
@@ -1633,14 +1067,14 @@ function MixColumnsMatrixWithDetail({ currentColumn, inputState, inputReady }) {
         flexDirection: "column",
         alignItems: "center",
         gap: 20,
-        background: "rgba(0,0,0,0.2)",
+        background: "var(--aes-deck-shade)",
         padding: 16,
         borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.12)",
+        border: "1px solid var(--aes-deck-border)",
       }}
     >
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>
+        <div style={{ fontSize: 13, marginBottom: 8, color: "var(--aes-deck-text)" }}>
           MixColumns matrix (GF(2^8))
         </div>
         <MixColumnsMatrixDisplay />
@@ -1659,16 +1093,16 @@ function MixColumnsInputGrid({ title, values, highlightColumn, cellSize }) {
   const [hovered, setHovered] = useState(null);
   return (
     <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>{title}</div>
+      <div style={{ fontSize: 13, marginBottom: 8, color: "var(--aes-deck-text)" }}>{title}</div>
       <div
         style={{
           display: "inline-grid",
           gridTemplateColumns: "repeat(4, 1fr)",
           gap: GRID_GAP,
-          background: "rgba(0,0,0,0.25)",
+          background: "var(--aes-deck-shade-deep)",
           padding: 12,
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid var(--aes-deck-border)",
         }}
       >
         {Array.from({ length: 16 }, (_, k) => {
@@ -1682,8 +1116,8 @@ function MixColumnsInputGrid({ title, values, highlightColumn, cellSize }) {
             <motion.div
               key={i}
               animate={{
-                backgroundColor: isHighlight ? "rgba(99, 102, 241, 0.5)" : "rgba(255,255,255,0.08)",
-                boxShadow: isHighlight ? "0 0 0 2px rgba(255,255,255,0.9)" : "none",
+                backgroundColor: isHighlight ? "var(--aes-deck-cell-highlight-bg)" : "var(--aes-deck-cell-bg)",
+                boxShadow: isHighlight ? "0 0 0 2px var(--surface)" : "none",
               }}
               transition={{ duration: 0.25 }}
               style={{
@@ -1706,7 +1140,7 @@ function MixColumnsInputGrid({ title, values, highlightColumn, cellSize }) {
                   {showBinary ? byteToBinaryStr(val) : val.toString(16).toUpperCase().padStart(2, "0")}
                 </span>
               ) : (
-                <span style={{ color: "rgba(255,255,255,0.4)" }}>—</span>
+                <span style={{ color: "var(--aes-deck-text-faint)" }}>—</span>
               )}
             </motion.div>
           );
@@ -1723,16 +1157,16 @@ function ShiftRowsStaticGrid({ title, values, cellSize }) {
   const [hovered, setHovered] = useState(null);
   return (
     <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>{title}</div>
+      <div style={{ fontSize: 13, marginBottom: 8, color: "var(--aes-deck-text)" }}>{title}</div>
       <div
         style={{
           display: "inline-grid",
           gridTemplateColumns: "repeat(4, 1fr)",
           gap: GRID_GAP,
-          background: "rgba(0,0,0,0.25)",
+          background: "var(--aes-deck-shade-deep)",
           padding: 12,
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid var(--aes-deck-border)",
         }}
       >
         {Array.from({ length: 16 }, (_, k) => {
@@ -1753,7 +1187,7 @@ function ShiftRowsStaticGrid({ title, values, cellSize }) {
                 fontFamily: "monospace",
                 fontWeight: 600,
                 fontSize: 12,
-                background: "rgba(255,255,255,0.08)",
+                background: "var(--aes-deck-cell-bg)",
                 overflow: "visible",
               }}
               onMouseEnter={() => setHovered(i)}
@@ -1764,7 +1198,7 @@ function ShiftRowsStaticGrid({ title, values, cellSize }) {
                   {showBinary ? byteToBinaryStr(val) : val.toString(16).toUpperCase().padStart(2, "0")}
                 </span>
               ) : (
-                <span style={{ color: "rgba(255,255,255,0.4)" }}>—</span>
+                <span style={{ color: "var(--aes-deck-text-faint)" }}>—</span>
               )}
             </motion.div>
           );
@@ -1812,8 +1246,8 @@ function MarqueeRow({ rowValues, shiftBy, cellSize }) {
               fontFamily: "monospace",
               fontWeight: 600,
               fontSize: 12,
-              background: "rgba(99, 102, 241, 0.35)",
-              boxShadow: "0 0 0 2px rgba(255,255,255,0.9)",
+              background: "var(--aes-deck-round-active-bg)",
+              boxShadow: "0 0 0 2px var(--surface)",
               flexShrink: 0,
             }}
           >
@@ -1832,16 +1266,16 @@ function ShiftRowsMiddleGrid({ title, workingState, srCursor, srPhase, cellSize 
   const rows = [0, 1, 2, 3];
   return (
     <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>{title}</div>
+      <div style={{ fontSize: 13, marginBottom: 8, color: "var(--aes-deck-text)" }}>{title}</div>
       <div
         style={{
           display: "inline-grid",
           gridTemplateColumns: "repeat(4, 1fr)",
           gap: GRID_GAP,
-          background: "rgba(0,0,0,0.25)",
+          background: "var(--aes-deck-shade-deep)",
           padding: 12,
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid var(--aes-deck-border)",
         }}
       >
         {rows.map((r) => {
@@ -1868,8 +1302,8 @@ function ShiftRowsMiddleGrid({ title, workingState, srCursor, srPhase, cellSize 
                 key={i}
                 layout
                 animate={{
-                  backgroundColor: isHighlight ? "rgba(99, 102, 241, 0.5)" : "rgba(255,255,255,0.08)",
-                  boxShadow: isHighlight ? "0 0 0 2px rgba(255,255,255,0.9)" : "none",
+                  backgroundColor: isHighlight ? "var(--aes-deck-cell-highlight-bg)" : "var(--aes-deck-cell-bg)",
+                  boxShadow: isHighlight ? "0 0 0 2px var(--surface)" : "none",
                 }}
                 transition={{ duration: 0.25 }}
                 style={{
@@ -1892,7 +1326,7 @@ function ShiftRowsMiddleGrid({ title, workingState, srCursor, srPhase, cellSize 
                     {showBinary ? byteToBinaryStr(val) : val.toString(16).toUpperCase().padStart(2, "0")}
                   </span>
                 ) : (
-                  <span style={{ color: "rgba(255,255,255,0.4)" }}>—</span>
+                  <span style={{ color: "var(--aes-deck-text-faint)" }}>—</span>
                 )}
               </motion.div>
             );
@@ -1903,107 +1337,12 @@ function ShiftRowsMiddleGrid({ title, workingState, srCursor, srPhase, cellSize 
   );
 }
 
-function AddRoundKeyGrid({ title, values, cursor, phase, isOutput, highlightKey, highlightState, cellSize }) {
-  const [hovered, setHovered] = useState(null);
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 13, marginBottom: 8, color: "rgba(255,255,255,0.85)" }}>{title}</div>
-      <div
-        style={{
-          display: "inline-grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 6,
-          background: "rgba(0,0,0,0.25)",
-          padding: 12,
-          borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
-        }}
-      >
-        {Array.from({ length: 16 }, (_, k) => {
-          const i = stateIndexToGrid(k);
-          const val = values[i];
-          const isHighlight =
-            (phase === 0 && highlightState && cursor === i) ||
-            (phase === 1 && highlightKey && cursor === i);
-          const isFilling = isOutput && cursor === i && phase === 2;
-          const isFilled = isOutput && values[i] != null;
-          const showVal = isOutput ? values[i] : val;
-          const isHovered = hovered === i;
-          const showBinary = isHovered && typeof showVal === "number";
-
-          return (
-            <motion.div
-              key={i}
-              layout
-              initial={false}
-              animate={{
-                backgroundColor: isHighlight
-                  ? "rgba(99, 102, 241, 0.5)"
-                  : isFilling || isFilled
-                  ? "rgba(34, 197, 94, 0.35)"
-                  : "rgba(255,255,255,0.08)",
-                boxShadow: isHighlight || isFilling ? "0 0 0 2px rgba(255,255,255,0.9)" : "none",
-                scale: isHighlight || isFilling ? 1.08 : 1,
-              }}
-              transition={{ duration: 0.25 }}
-              style={{
-                width: cellSize,
-                height: cellSize,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 8,
-                fontFamily: "monospace",
-                overflow: "visible",
-              }}
-              onMouseEnter={() => setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
-            >
-              <motion.div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transformOrigin: "center",
-                  fontWeight: 600,
-                }}
-                animate={{ scale: isHovered ? 1.25 : 1 }}
-                transition={{ duration: 0.2 }}
-              >
-                <AnimatePresence mode="wait">
-                  {showVal != null ? (
-                    <motion.span
-                      key={showBinary ? "bin" : "hex"}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      style={{
-                        fontSize: showBinary ? 9 : 12,
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {showBinary ? byteToBinaryStr(showVal) : showVal.toString(16).toUpperCase().padStart(2, "0")}
-                    </motion.span>
-                  ) : (
-                    <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>—</span>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            </motion.div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 const btnStyle = {
   padding: "8px 14px",
-  background: "rgba(99, 102, 241, 0.9)",
+  background: "var(--aes-deck-primary-btn)",
   border: "none",
   borderRadius: 8,
-  color: "#fff",
+  color: "var(--step-on-deck)",
   cursor: "pointer",
   fontWeight: 600,
   fontSize: 14,
@@ -2028,10 +1367,10 @@ function SBoxGrid({ cursor, phase, sboxCoord, cellSize }) {
     <div
       style={{
         display: "inline-block",
-        background: "rgba(0,0,0,0.25)",
+        background: "var(--aes-deck-shade-deep)",
         borderRadius: 12,
         padding: 12,
-        border: "1px solid rgba(255,255,255,0.12)",
+        border: "1px solid var(--aes-deck-border)",
       }}
     >
       <table style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
@@ -2048,8 +1387,8 @@ function SBoxGrid({ cursor, phase, sboxCoord, cellSize }) {
                     height: 20,
                     fontSize: 11,
                     fontWeight: isHighlightCol ? 700 : 400,
-                    color: isHighlightCol ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.8)",
-                    background: isHighlightCol ? "rgba(99, 102, 241, 0.5)" : "transparent",
+                    color: isHighlightCol ? "var(--aes-deck-text)" : "var(--aes-deck-text-muted)",
+                    background: isHighlightCol ? "var(--aes-deck-cell-highlight-bg)" : "transparent",
                     borderRadius: 4,
                   }}
                 >
@@ -2070,8 +1409,8 @@ function SBoxGrid({ cursor, phase, sboxCoord, cellSize }) {
                   width: cellSize,
                   fontSize: 11,
                   fontWeight: isHighlightRow ? 700 : 400,
-                  color: isHighlightRow ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.8)",
-                  background: isHighlightRow ? "rgba(99, 102, 241, 0.5)" : "transparent",
+                  color: isHighlightRow ? "var(--aes-deck-text)" : "var(--aes-deck-text-muted)",
+                  background: isHighlightRow ? "var(--aes-deck-cell-highlight-bg)" : "transparent",
                   textAlign: "right",
                   paddingRight: 4,
                   borderRadius: 4,
@@ -2095,10 +1434,10 @@ function SBoxGrid({ cursor, phase, sboxCoord, cellSize }) {
                       animate={{
                         scale: isHighlight ? 1.15 : 1,
                         backgroundColor: isHighlight
-                          ? "rgba(99, 102, 241, 0.7)"
-                          : "rgba(255,255,255,0.08)",
+                          ? "var(--aes-deck-cell-highlight-strong)"
+                          : "var(--aes-deck-cell-bg)",
                         boxShadow: isHighlight
-                          ? "0 0 0 2px rgba(255,255,255,0.9)"
+                          ? "0 0 0 2px var(--surface)"
                           : "none",
                       }}
                       transition={{ duration: 0.25 }}
@@ -2174,7 +1513,7 @@ function StateGrid({
         style={{
           fontSize: 14,
           marginBottom: 10,
-          color: "rgba(255,255,255,0.85)",
+          color: "var(--aes-deck-text)",
         }}
       >
         {title}
@@ -2184,10 +1523,10 @@ function StateGrid({
           display: "inline-grid",
           gridTemplateColumns: "repeat(4, 1fr)",
           gap: 6,
-          background: "rgba(0,0,0,0.25)",
+          background: "var(--aes-deck-shade-deep)",
           padding: 14,
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid var(--aes-deck-border)",
         }}
       >
         {Array.from({ length: 16 }, (_, k) => {
@@ -2207,13 +1546,13 @@ function StateGrid({
               initial={false}
               animate={{
                 backgroundColor: isInputHighlight
-                  ? "rgba(99, 102, 241, 0.5)"
+                  ? "var(--aes-deck-cell-highlight-bg)"
                   : isOutputFilling || isOutputFilled
-                  ? "rgba(34, 197, 94, 0.35)"
-                  : "rgba(255,255,255,0.08)",
+                  ? "var(--aes-deck-success-cell)"
+                  : "var(--aes-deck-cell-bg)",
                 boxShadow:
                   isInputHighlight || isOutputFilling
-                    ? "0 0 0 2px rgba(255,255,255,0.9)"
+                    ? "0 0 0 2px var(--surface)"
                     : "none",
                 scale: isInputHighlight || isOutputFilling ? 1.08 : 1,
               }}
@@ -2258,7 +1597,7 @@ function StateGrid({
                     <motion.span
                       initial={{ opacity: 0.4 }}
                       animate={{ opacity: 1 }}
-                      style={{ color: "rgba(255,255,255,0.4)", fontSize: 13 }}
+                      style={{ color: "var(--aes-deck-text-faint)", fontSize: 13 }}
                     >
                       —
                     </motion.span>

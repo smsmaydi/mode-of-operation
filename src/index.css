@@ -1,66 +1,99 @@
+/* Global base — colors only via theme.css tokens */
+
+html {
+  height: 100%;
+  overflow: hidden;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 body {
+  height: 100%;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  overflow: hidden;
+  overflow-x: hidden;
+  max-width: 100%;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--line-height-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
 }
+
 .react-flow {
   contain: strict;
+  background: var(--rf-canvas-bg) !important;
 }
 
-/* Dark theme for React Flow */
-.react-flow.dark {
-  background-color: #1a1a1a !important;
+/* Draw edges above node cards so inter-block links stay visible (e.g. CBC chain). */
+.react-flow .react-flow__edges {
+  position: relative;
+  z-index: 10;
+}
+.react-flow .react-flow__nodes {
+  position: relative;
+  z-index: 9;
 }
 
-.react-flow.dark .react-flow__node {
-  background-color: #2d2d2d;
-  border-color: #444;
-  color: #000000; /* Keep text black */
+/* Match inner node cards (var(--radius-sm)); transparent wrapper avoids square light corners in dark mode. */
+.react-flow .react-flow__node {
+  background-color: var(--rf-node-bg);
+  border-color: var(--rf-node-border);
+  color: var(--rf-node-text);
+  border-radius: var(--radius-sm);
 }
 
-.react-flow.dark .react-flow__node * {
-  color: #000000 !important; /* Force all text to be black */
+.react-flow .react-flow__handle {
+  background-color: var(--rf-handle);
 }
 
-.react-flow.dark .react-flow__handle {
-  background-color: #555;
+.react-flow .react-flow__handle:hover {
+  background-color: var(--rf-handle-hover);
 }
 
-.react-flow.dark .react-flow__handle:hover {
-  background-color: #666;
+/* Let each edge keep its semantic stroke from `edge.style`; no global gray wash. */
+.react-flow .react-flow__edge-path {
+  opacity: 1;
+  stroke-width: 2.75px;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
 }
 
-.react-flow.dark .react-flow__edge-path {
-  stroke: #888;
+.react-flow .react-flow__edge.animated .react-flow__edge-path {
+  opacity: 1;
 }
 
-.react-flow.dark .react-flow__minimap {
-  background-color: #1a1a1a;
+.react-flow .react-flow__connection-path {
+  opacity: 1;
+  stroke-width: 2.5px;
 }
 
-.react-flow.dark .react-flow__controls {
-  background-color: #2d2d2d;
-  border-color: #444;
+.react-flow .react-flow__minimap {
+  background-color: var(--rf-minimap-bg);
 }
 
-.react-flow.dark .react-flow__controls button {
-  background-color: #3d3d3d;
-  color: #fff;
-  border-color: #444;
+.react-flow .react-flow__controls {
+  background-color: var(--rf-controls-bg);
+  border-color: var(--rf-controls-border);
 }
 
-.react-flow.dark .react-flow__controls button:hover {
-  background-color: #4d4d4d;
+.react-flow .react-flow__controls button {
+  background-color: var(--rf-controls-button);
+  color: var(--rf-controls-icon);
+  border-color: var(--rf-controls-border);
 }
 
-.react-flow.dark .react-flow__attribution {
-  color: #888;
+.react-flow .react-flow__controls button:hover {
+  background-color: var(--rf-controls-button-hover);
+}
+
+.react-flow .react-flow__attribution {
+  color: var(--rf-attribution);
 }

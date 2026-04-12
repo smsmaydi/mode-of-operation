@@ -39,18 +39,24 @@ function KeyNode({ id, data }) {
 
   const { cipherType } = useMemo(() => {
     const outgoing = edges.filter((e) => e.source === id);
+    const blockTargets = [];
 
-    const toBlock = outgoing
-      .map((e) => {
-        const t = nodes.find((n) => n.id === e.target);
-        return { edge: e, target: t };
-      })
-      .filter((x) => x.target && x.target.type === "blockcipher");
+    for (const e of outgoing) {
+      const t = nodes.find((n) => n.id === e.target);
+      if (t?.type === "blockcipher") blockTargets.push(t);
+      if (t?.type === "keysnap") {
+        edges
+          .filter((e2) => e2.source === t.id)
+          .forEach((e2) => {
+            const t2 = nodes.find((n) => n.id === e2.target);
+            if (t2?.type === "blockcipher") blockTargets.push(t2);
+          });
+      }
+    }
 
+    if (blockTargets.length === 0) return { cipherType: "xor", targetBlockId: null };
 
-    if (toBlock.length === 0) return { cipherType: "xor", targetBlockId: null };
-
-    const chosen = toBlock[0].target;
+    const chosen = blockTargets[0];
     return { cipherType: chosen.data?.cipherType || "xor" };
   }, [edges, nodes, id]);
 
@@ -81,17 +87,19 @@ function KeyNode({ id, data }) {
     <div
       style={{
         padding: 10,
-        border: "1px solid #333",
-        borderRadius: 6,
-        background: "LightBlue",
-        minWidth: 200,
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--node-key-bg)",
+        color: "var(--node-key-text)",
+        minWidth: 172,
+        position: "relative",
       }}
     >
       <strong>Key</strong>
 
-      <Handle type="source" position={Position.Right} id="out" style={{ background: "#000" }} />
+      <Handle type="source" position={Position.Right} id="out" style={{ background: "var(--text)" }} />
       {showLabels && (
-        <div style={{ position: "absolute", top: "46%", right: -24, fontSize: 10, color: "#111" }}>
+        <div style={{ position: "absolute", top: "46%", right: -24, fontSize: 10, color: "var(--text)" }}>
           out
         </div>
       )}
@@ -112,9 +120,10 @@ function KeyNode({ id, data }) {
               padding: "3px 6px",
               fontSize: 10,
               borderRadius: 4,
-              border: "1px solid #999",
+              border: "1px solid var(--border)",
               marginTop: 4,
-              background: "white",
+              background: "var(--node-field-bg)",
+              color: "var(--node-field-text)",
               fontFamily: "monospace"
             }}
           />
@@ -128,8 +137,9 @@ function KeyNode({ id, data }) {
                 fontSize: 10, 
                 cursor: 'pointer',
                 borderRadius: 4,
-                border: '1px solid #999',
-                background: '#fff'
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--node-action-btn-text)',
               }}
             >
               🎲 128 bit
@@ -153,8 +163,9 @@ function KeyNode({ id, data }) {
               fontFamily: "monospace",
               letterSpacing: "0.05em",
               borderRadius: 4,
-              border: "1px solid #999",
-              background: "white",
+              border: "1px solid var(--border)",
+              background: "var(--node-field-bg)",
+              color: "var(--node-field-text)",
               resize: "none",
               boxSizing: "border-box",
             }}
@@ -168,8 +179,9 @@ function KeyNode({ id, data }) {
                 fontSize: 10,
                 cursor: "pointer",
                 borderRadius: 4,
-                border: "1px solid #999",
-                background: "#fff",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                color: "var(--node-action-btn-text)",
               }}
             >
               🎲 128 bit

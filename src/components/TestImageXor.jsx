@@ -58,7 +58,7 @@ export default function TestImageXor() {
           <img
             src={outUrl}
             alt="cipher"
-            style={{ maxWidth: '300px', border: '1px solid #ccc' }}
+            style={{ maxWidth: "300px", border: "1px solid var(--border)" }}
           />
           <p><a href={outUrl} download="xor.png">Download</a></p>
         </div>

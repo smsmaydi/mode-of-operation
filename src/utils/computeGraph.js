@@ -20,6 +20,56 @@ function hexToBits(hex) {
   return bits;
 }
 
+/** 64-bit counter as binary string: add delta, wrap mod 2^64 (for multi-block CTR). */
+export function incrementCtrCounterBits64(counterBits, delta) {
+  const s = String(counterBits || "").replace(/\s/g, "");
+  if (!/^[01]*$/.test(s)) return "0".repeat(64);
+  const padded = s.padStart(64, "0").slice(-64);
+  let carry = Math.max(0, Math.floor(delta));
+  const bits = new Array(64);
+  for (let i = 63; i >= 0; i--) {
+    const bi = padded[i] === "1" ? 1 : 0;
+    const sum = bi + carry;
+    bits[i] = sum % 2;
+    carry = Math.floor(sum / 2);
+  }
+  return bits.join("");
+}
+
+/** Ciphertext node may store XOR output as bit string or AES as hex — normalize to `wantLen` bits for CBC XOR. */
+function ciphertextStorageToXorBits(fb, wantLen) {
+  if (fb == null || fb === "") return null;
+  const s = String(fb).replace(/\s/g, "");
+  const len = wantLen && wantLen > 0 ? wantLen : 8;
+  if (/^[01]+$/.test(s)) {
+    const t = s.slice(0, len);
+    return t.length < len ? t.padEnd(len, "0") : t;
+  }
+  if (/^[0-9a-fA-F]+$/.test(s)) {
+    const bits = hexToBits(s);
+    const t = bits.slice(0, len);
+    return t.length < len ? t.padEnd(len, "0") : t;
+  }
+  return null;
+}
+
+function resolveXorPcValue(pcEdge, valueMap, nodes, wantLen) {
+  if (!pcEdge) return null;
+  const mapped = valueMap.get(pcEdge.source)?.value;
+  if (mapped != null && mapped !== "") {
+    if (typeof mapped === "string" && /^[01]+$/.test(mapped)) {
+      return mapped.slice(0, wantLen).padEnd(wantLen, "0");
+    }
+    const fromHexOrOther = ciphertextStorageToXorBits(mapped, wantLen);
+    if (fromHexOrOther) return fromHexOrOther;
+  }
+  const src = nodes.find((nd) => nd.id === pcEdge.source);
+  if (src?.type === "ciphertext") {
+    return ciphertextStorageToXorBits(src.data?.fullBinary, wantLen);
+  }
+  return null;
+}
+
 // String → Binary (8 bit ASCII)
 function textToBinary(str) {
   return Array.from(str)
@@ -138,6 +188,15 @@ function decryptBitsWithAES(encryptedData, keyPassphrase) {
   }
 }
 
+/**
+ * Single pass over the graph: derive bit/hex values, run XOR or AES per `blockcipher` settings,
+ * wire CBC/CTR paths, and mutate node `data` previews / `valueMap` logic in place (returns new node array).
+ *
+ * @param {import("reactflow").Node[]} nodes
+ * @param {import("reactflow").Edge[]} edges
+ * @param {"ecb"|"cbc"|"ctr"|string} [mode='ecb'] — operation mode from the app shell
+ * @returns {import("reactflow").Node[]}
+ */
 export function computeGraphValues(nodes, edges, mode = 'ecb') {
   // Prevent unnecessary processing
   if (!nodes || !edges) return nodes;
@@ -218,9 +277,77 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
     }
   });
 
-  // --- XOR nodes (pre-block XOR for CBC) ---
-  // In CTR mode, skip XOR processing here (will be done after BlockCipher)
-  if (mode !== "ctr") {
+  // --- CTR snap (per–BlockCipher; value follows master ctr node, e.g. ctr1 from panel) ---
+  nodes.forEach((n) => {
+    if (n.type !== "ctrsnap") return;
+    const srcId = n.data?.sourceCtrId || "ctr1";
+    const parent = valueMap.get(srcId);
+    if (parent?.type === "ctr") {
+      valueMap.set(n.id, {
+        type: "ctr",
+        value: {
+          nonceBits: parent.value?.nonceBits ?? "",
+          counterBits: parent.value?.counterBits ?? "",
+        },
+      });
+    } else {
+      valueMap.set(n.id, { type: "ctr", value: { nonceBits: "", counterBits: "" } });
+    }
+  });
+
+  // --- Key snap (per–BlockCipher copy; value follows master Key node) ---
+  nodes.forEach((n) => {
+    if (n.type !== "keysnap") return;
+    const srcId = n.data?.sourceKeyId || "k1";
+    const parent = valueMap.get(srcId);
+    if (parent) {
+      valueMap.set(n.id, {
+        type: "bits",
+        value: parent.value,
+        keyText: parent.keyText,
+        bits: parent.bits,
+      });
+    } else {
+      valueMap.set(n.id, { type: "bits", value: null, keyText: null, bits: null });
+    }
+  });
+
+  // --- Plaintext chunks (slice of master plaintext p1) ---
+  nodes.forEach((n) => {
+    if (n.type !== "plaintextchunk") return;
+    const srcId = n.data?.sourcePlaintextId || "p1";
+    const idx = Number(n.data?.blockIndex ?? 0);
+    const size = Number(n.data?.blockSizeBits ?? 8);
+    const parent = valueMap.get(srcId);
+    if (
+      !parent ||
+      parent.type === "image" ||
+      parent.type === "encrypted" ||
+      parent.type === "encryptedFile"
+    ) {
+      valueMap.set(n.id, { type: "bits", value: null });
+      n.data = { ...n.data, previewHex: "…", previewBits: "" };
+      return;
+    }
+    const full = parent.value;
+    if (typeof full !== "string" || !/^[01]+$/.test(full)) {
+      valueMap.set(n.id, { type: "bits", value: null });
+      n.data = { ...n.data, previewHex: "…", previewBits: "" };
+      return;
+    }
+    const start = idx * size;
+    let chunk = full.slice(start, start + size);
+    if (chunk.length < size) chunk = chunk.padEnd(size, "0");
+    valueMap.set(n.id, { type: "bits", value: chunk });
+    n.data = {
+      ...n.data,
+      previewHex: bitsToHex(chunk).toUpperCase(),
+      previewBits: chunk,
+    };
+  });
+
+  const runXorPreBlockPass = () => {
+    if (mode === "ctr") return;
     nodes.forEach((n) => {
       if (n.type === "xor") {
       console.log("🔧 XOR node processing:", n.id);
@@ -232,7 +359,9 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       const ptData = ptEdge ? valueMap.get(ptEdge.source) : null;
       const ptVal = ptData?.value;
       const ptType = ptData?.type;
-      const pcVal = pcEdge ? valueMap.get(pcEdge.source)?.value : null;
+      const wantLen =
+        ptVal && typeof ptVal === "string" && /^[01]+$/.test(ptVal) ? ptVal.length : 8;
+      const pcVal = resolveXorPcValue(pcEdge, valueMap, nodes, wantLen);
       const ptIsDecryptMode = ptData?.isDecryptMode;
       const ptDecryptKey = ptData?.decryptKey;
       
@@ -304,7 +433,9 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       }
     }
     });
-  }
+  };
+
+  runXorPreBlockPass();
 
   // --- BlockCipher nodes ---
 
@@ -317,8 +448,9 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
   // pType = plaintext type (bits/text/image)
   // kVal = key value (bits)
   // prevVal = previous ciphertext value (bits)
-  nodes.forEach((n) => {
-    if (n.type === "blockcipher") {
+  const runBlockCipherPass = () => {
+    nodes.forEach((n) => {
+      if (n.type !== "blockcipher") return;
       const inc = incoming(n.id);
       const pEdge = mode === "ctr"
         ? inc.find((e) => e.targetHandle === "ctr")
@@ -344,8 +476,14 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       } else if (keyMapEntry) {
         // Encrypt mode: use key from Key node
         if (cipherType === "aes") {
-          // AES: use keyText (passphrase), not bits
           kVal = keyMapEntry.keyText || keyMapEntry.bits || keyMapEntry.value;
+          if (kVal != null && kVal !== "") {
+            const ks = String(kVal).replace(/\s/g, "");
+            if (/^[01]+$/.test(ks)) {
+              const kb = ks.replace(/[^01]/g, "");
+              kVal = kb.slice(0, 128).padEnd(128, "0");
+            }
+          }
         } else {
           // XOR: use bits
           kVal = keyMapEntry.bits || keyMapEntry.value;
@@ -381,7 +519,15 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
       // CTR Mode: build keystream from nonce||counter and key
       if (mode === "ctr" && pType === "ctr") {
         const nonceBits = pVal?.nonceBits || "";
-        const counterBits = pVal?.counterBits || "";
+        let counterBits = pVal?.counterBits || "";
+        const blockIdx =
+          typeof n.data?.blockIndex === "number"
+            ? n.data.blockIndex
+            : (() => {
+                const m = /^b-(\d+)$/.exec(n.id);
+                return m ? parseInt(m[1], 10) : 0;
+              })();
+        counterBits = incrementCtrCounterBits64(counterBits, blockIdx);
         const nonceCounter = `${nonceBits}${counterBits}`;
 
         if (!nonceCounter) {
@@ -748,8 +894,10 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           });
         }
       }
-    }
-  });
+    });
+  };
+
+  runBlockCipherPass();
 
   // --- Decrypt nodes ---
   nodes.forEach((n) => {
@@ -903,8 +1051,9 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
   }
 
   // --- Ciphertext nodes ---
-  nodes.forEach((n) => {
-    if (n.type === "ciphertext") {
+  const runCiphertextPass = () => {
+    nodes.forEach((n) => {
+      if (n.type !== "ciphertext") return;
       if (!n.data) n.data = {};
 
       const inc = incoming(n.id);
@@ -984,8 +1133,21 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
           n.data = { ...n.data, result: "", fullBinary: undefined };
         }
       }
+    });
+  };
+
+  runCiphertextPass();
+
+  if (mode === "cbc") {
+    const xorCols = nodes.filter((x) => x.type === "xor").length;
+    const sweeps = Math.min(28, Math.max(4, xorCols + 2));
+    for (let s = 0; s < sweeps; s++) {
+      runXorPreBlockPass();
+      runBlockCipherPass();
+      runCiphertextPass();
     }
-  });
+  }
+
   function bitsWithAscii(bits) {
     const lines = [];
     for (let i = 0; i < bits.length; i += 8) {
@@ -1005,7 +1167,18 @@ export function computeGraphValues(nodes, edges, mode = 'ecb') {
 
 
   // 🔄 Return every node with new data reference (forces React Flow update)
-  const result = nodes.map((n) => ({ ...n, data: { ...n.data } }));
+  const result = nodes.map((n) => {
+    const next = { ...n, data: { ...n.data } };
+    if (next.id === "p1" || next.id === "k1" || next.id === "iv1") {
+      return {
+        ...next,
+        hidden: true,
+        draggable: false,
+        selectable: false,
+      };
+    }
+    return next;
+  });
 
   return result;
 }

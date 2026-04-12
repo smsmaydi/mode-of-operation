@@ -11,9 +11,10 @@ export default function DecryptNode({ id, data }) {
     <div
       style={{
         padding: 10,
-        border: "1px solid #333",
-        borderRadius: 6,
-        background: "#FFB6C1",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--danger-soft)",
+        color: "var(--text)",
         minWidth: 200,
         position: "relative",
       }}
@@ -27,7 +28,7 @@ export default function DecryptNode({ id, data }) {
           border: "none",
           background: "transparent",
           cursor: "pointer",
-          color: "#b00",
+          color: "var(--danger)",
           fontWeight: "bold",
           display: checkModeForDeleteButton(data?.mode),
         }}
@@ -36,19 +37,19 @@ export default function DecryptNode({ id, data }) {
       </button>
 
       <strong>Decrypt</strong>
-      <Handle type="target" position={Position.Top} id="encrypted" style={{ background: "orange", left: "70%" }} />
-      <Handle type="target" position={Position.Left} id="key" style={{ background: "blue", top: "30%" }} />
-      <Handle type="source" position={Position.Bottom} id="out" style={{ background: "#000" }} />
+      <Handle type="target" position={Position.Top} id="encrypted" style={{ background: "var(--edge-ciphertext)", left: "70%" }} />
+      <Handle type="target" position={Position.Left} id="key" style={{ background: "var(--edge-key)", top: "30%" }} />
+      <Handle type="source" position={Position.Bottom} id="out" style={{ background: "var(--text)" }} />
 
       {showLabels && (
         <>
-          <div style={{ position: "absolute", top: -14, left: "62%", fontSize: 10, color: "#FF8C00" }}>
+          <div style={{ position: "absolute", top: -14, left: "62%", fontSize: 10, color: "var(--edge-ciphertext)" }}>
             encrypted
           </div>
-          <div style={{ position: "absolute", top: "24%", left: -36, fontSize: 10, color: "#06c" }}>
+          <div style={{ position: "absolute", top: "24%", left: -36, fontSize: 10, color: "var(--accent-primary)" }}>
             key
           </div>
-          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "#111" }}>
+          <div style={{ position: "absolute", bottom: -14, left: "44%", fontSize: 10, color: "var(--text)" }}>
             out
           </div>
         </>
@@ -69,9 +70,10 @@ export default function DecryptNode({ id, data }) {
           padding: "3px 6px",
           fontSize: 12,
           borderRadius: 4,
-          border: "1px solid #999",
+          border: "1px solid var(--border)",
           marginTop: 4,
-          background: "white",
+          background: "var(--node-field-bg)",
+          color: "var(--node-field-text)",
         }}
       >
         <option value="aes">AES</option>
@@ -91,8 +93,9 @@ export default function DecryptNode({ id, data }) {
               fontSize: 10,
               fontFamily: "monospace",
               borderRadius: 4,
-              border: "1px solid #999",
-              background: "rgba(255,255,255,0.9)",
+              border: "1px solid var(--border)",
+              background: "var(--node-field-bg)",
+              color: "var(--node-field-text)",
               resize: "none",
               overflow: "hidden",
               whiteSpace: "pre-wrap",
@@ -106,7 +109,14 @@ export default function DecryptNode({ id, data }) {
         <button
           className="nodrag"
           onClick={() => data.onRunDecrypt?.(id)}
-          style={{ borderRadius: 5, border: "solid 1px #333", cursor: "pointer" }}
+          style={{
+            borderRadius: 5,
+            border: "solid 1px var(--border)",
+            cursor: "pointer",
+            background: "var(--surface-hover)",
+            color: "var(--node-action-btn-text)",
+            padding: "4px 12px",
+          }}
         >
           Run
         </button>

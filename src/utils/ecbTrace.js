@@ -58,10 +58,12 @@ export function ecbFirstNTrace(nodes, _edges, n = 8, blockSize = 16) {
   if (!pt || !keyN) return [];
 
   // Plaintext sources:
-  // - Prefer bits if present and valid
-  // - Otherwise fall back to text
+  // - PlaintextNode stores binary under `value` when inputType === "bits"
   const text = pickFirstDefined(pt.data, ["value", "text", "plaintext", "input", "message"]);
-  const bits = pickFirstDefined(pt.data, ["bits", "bitString", "bin"]);
+  const bits =
+    pt.data?.inputType === "bits" && typeof pt.data?.value === "string"
+      ? pt.data.value
+      : pickFirstDefined(pt.data, ["bits", "bitString", "bin"]);
 
   // Key sources:
   // - Prefer keyBits if present and valid
@@ -115,6 +117,87 @@ export function ecbFirstNTrace(nodes, _edges, n = 8, blockSize = 16) {
       mHex: toHex(m),
       cHex: toHex(c),
     });
+  }
+
+  return rows;
+}
+
+/**
+ * Multi-block trace for the XOR demo: 1 byte per block so short messages show several rows.
+ * CBC: each row shows XOR with IV (block 1) or previous ciphertext byte-block before "encryption".
+ */
+export function ecbFirstNTraceFromGraph(nodes, mode = "ecb", n = 16, blockSizeBytes = 1) {
+  const pt = nodes.find((x) => x.type === "plaintext");
+  const keyN = nodes.find((x) => x.type === "key");
+  if (!pt || !keyN) return [];
+
+  const bitsFromNode =
+    pt.data?.inputType === "bits" && typeof pt.data?.value === "string"
+      ? pt.data.value
+      : pickFirstDefined(pt.data, ["bits", "bitString", "bin"]);
+
+  let bytes;
+  if (bitsFromNode) {
+    const r = bitsToBytesStrict(bitsFromNode);
+    if (!r.ok) return [];
+    bytes = r.bytes;
+  } else {
+    const text = pickFirstDefined(pt.data, ["value", "text", "plaintext", "input", "message"]);
+    bytes = new TextEncoder().encode(String(text || ""));
+  }
+
+  const keyBits = pickFirstDefined(keyN.data, ["bits", "keyBits", "bitString", "bin"]);
+  let keyBytes;
+  if (keyBits) {
+    const r = bitsToBytesStrict(keyBits);
+    if (!r.ok) return [];
+    keyBytes = r.bytes;
+  } else {
+    const kt = pickFirstDefined(keyN.data, ["value", "keyText", "text", "key"]);
+    keyBytes = new TextEncoder().encode(String(kt || ""));
+  }
+
+  if (!bytes?.length || !keyBytes?.length) return [];
+
+  let ivBytes = null;
+  if (mode === "cbc") {
+    const ivNode = nodes.find((x) => x.type === "iv");
+    const ivBits = ivNode?.data?.bits;
+    if (ivBits) {
+      const r = bitsToBytesStrict(ivBits);
+      if (r.ok) ivBytes = r.bytes;
+    }
+  }
+
+  const rows = [];
+  let prevChain = ivBytes;
+
+  for (let i = 0; i < n; i++) {
+    const start = i * blockSizeBytes;
+    const m = bytes.slice(start, start + blockSizeBytes);
+    if (m.length === 0) break;
+
+    let xored;
+    if (mode === "cbc" && prevChain && prevChain.length > 0) {
+      xored = new Uint8Array(m.length);
+      for (let j = 0; j < m.length; j++) {
+        xored[j] = m[j] ^ prevChain[j % prevChain.length];
+      }
+    } else {
+      xored = m;
+    }
+
+    const c = xorWithRepeatingKey(xored, keyBytes);
+
+    rows.push({
+      i,
+      mHex: toHex(m),
+      xoredHex: mode === "cbc" ? toHex(xored) : null,
+      cHex: toHex(c),
+      chainFromLabel: mode === "cbc" ? (i === 0 ? "IV" : `C${i}`) : null,
+    });
+
+    if (mode === "cbc") prevChain = c;
   }
 
   return rows;
